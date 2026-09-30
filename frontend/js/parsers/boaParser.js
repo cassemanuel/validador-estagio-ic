@@ -44,10 +44,19 @@ const LAYOUT_CONFIG = {
   // página não traz os rótulos da coluna esquerda.
   PADRAO_Y_CRED_RECOM: 277,
   PADRAO_Y_PER: 356,
-  TOLERANCIA_LINHA: 8, // variação de Y aceitável para itens da mesma linha
-  MAX_COLUNA_DELTA: 4, // variação de X aceitável para itens da mesma coluna
+  TOLERANCIA_LINHA: 10, // variação de Y aceitável para itens da mesma linha
+  MAX_COLUNA_DELTA: 6, // variação de X aceitável para itens da mesma coluna
   ZONA_APROVADAS_OFFSET_Y: 20, // distância acima da linha "Cred" das aprovadas
   CREDITOS_PADRAO: 4.0, // CrR assumido quando a célula "Cred" não é legível
+};
+
+// Rótulos das linhas da tabela variam entre versões do SIGA
+// (com/sem ponto final, "Cred"/"Cred.", "C.H."/"CH", "Per"/"Per.").
+const LABEL_LINHA_REGEX = {
+  cred: /^cred\.?$/i,
+  per: /^per\.?$/i,
+  grau: /^grau\.?$/i,
+  ch: /^c\.?\s*h\.?$/i,
 };
 
 const { PADRAO_Y_CRED_RECOM, PADRAO_Y_PER, TOLERANCIA_LINHA } = LAYOUT_CONFIG;
@@ -71,6 +80,17 @@ function normalize(str) {
  */
 function isCodigoUFRJ(str) {
   return CODIGO_UFRJ_REGEX.test(str.trim());
+}
+
+/**
+ * Verifica se o texto é o rótulo de uma linha da tabela do BOA,
+ * tolerante a variações de pontuação entre versões do SIGA.
+ * @param {string} str
+ * @param {'cred'|'per'|'grau'|'ch'} linha
+ * @returns {boolean}
+ */
+function isLabelLinha(str, linha) {
+  return LABEL_LINHA_REGEX[linha].test(normalize(str).trim());
 }
 
 /**
@@ -180,10 +200,11 @@ export function parsePaginaBOA(items, faixas) {
   let { credRecomY, perY } = faixas;
 
   // Localiza os rótulos das linhas para calibrar as faixas de Y desta página.
+  // O match é tolerante a variantes de pontuação ("Cred.", "CH", "Per.").
   const credLabelYs = items
-    .filter((it) => it.str === 'Cred')
+    .filter((it) => isLabelLinha(it.str, 'cred'))
     .map((it) => it.y);
-  const perLabelY = items.find((it) => it.str === 'Per')?.y;
+  const perLabelY = items.find((it) => isLabelLinha(it.str, 'per'))?.y;
 
   if (credLabelYs.length) credRecomY = Math.min(...credLabelYs);
   if (perLabelY != null) perY = perLabelY;
@@ -194,13 +215,23 @@ export function parsePaginaBOA(items, faixas) {
 
   // Rótulos da zona de aprovadas (Grau/C.H./Cred acima do elenco recomendado)
   // permitem associar cada decimal à linha correta dentro da coluna.
-  const labelY = (txt) =>
+  const labelY = (linha) =>
     items
-      .filter((it) => it.str === txt && it.y > approvalMinY)
+      .filter((it) => isLabelLinha(it.str, linha) && it.y > approvalMinY)
       .map((it) => it.y);
-  const grauYs = labelY('Grau');
-  const credAprYs = labelY('Cred');
-  const chAprYs = labelY('C.H.');
+  const grauYs = labelY('grau');
+  const credAprYs = labelY('cred');
+  const chAprYs = labelY('ch');
+
+  // Depuração opcional (DevTools → nível "Verbose"): tokens lidos e faixas
+  // calibradas da página, úteis para inspecionar layouts novos do SIGA.
+  console.debug('[boaParser] página:', {
+    itens: items.length,
+    credRecomY,
+    perY,
+    approvalMinY,
+    labels: { cred: credLabelYs, per: perLabelY, grau: grauYs, credApr: credAprYs, ch: chAprYs },
+  });
 
   const obrigatorias = [];
   const optativas = [];
@@ -211,6 +242,12 @@ export function parsePaginaBOA(items, faixas) {
   for (const coluna of agruparPorColuna(items)) {
     try {
       const ordenados = [...coluna].sort((a, b) => a.y - b.y);
+
+      // Depuração (Verbose): tokens brutos da coluna antes da classificação.
+      console.debug(
+        `[boaParser] coluna x=${coluna[0]?.x?.toFixed(1)}:`,
+        ordenados.map((it) => `${it.str}@${it.y.toFixed(0)}`)
+      );
 
       // Atividades já aprovadas: códigos na zona superior da coluna (acima
       // do elenco recomendado). O BOA discrimina por coluna o código, grau,
@@ -267,12 +304,18 @@ export function parsePaginaBOA(items, faixas) {
 
       // Código recomendado: item-código na linha mais baixa da coluna.
       const codigos = ordenados.filter((it) => isCodigoUFRJ(it.str));
-      if (!codigos.length) continue;
+      if (!codigos.length) {
+        console.debug('[boaParser] coluna descartada: sem código UFRJ.');
+        continue;
+      }
       const codigo = codigos[0].str.trim();
 
       // Status de pendência na coluna (linha de ocorrências).
       const statusItem = ordenados.find((it) => detectarStatus(it.str));
-      if (!statusItem) continue;
+      if (!statusItem) {
+        console.debug(`[boaParser] ${codigo} descartada: sem status de pendência.`);
+        continue;
+      }
       const status = detectarStatus(statusItem.str);
 
       // Aprovação/equivalência: qualquer código, grau ou conceito na zona
@@ -286,7 +329,10 @@ export function parsePaginaBOA(items, faixas) {
             DECIMAL_REGEX.test(it.str) ||
             LETRAS_APROVACAO.has(it.str.toUpperCase()))
       );
-      if (aprovado) continue;
+      if (aprovado) {
+        console.debug(`[boaParser] ${codigo} descartada: aprovada na zona superior.`);
+        continue;
+      }
 
       // Período recomendado: inteiro na linha "Per" (define obrigatoriedade).
       const perItem = ordenados.find(
@@ -369,6 +415,13 @@ export async function processarBOA(pdfData, pdfjsLib) {
       }
     }
   }
+
+  console.debug('[boaParser] resumo do documento:', {
+    paginas: paginas.length,
+    aprovadas: aprovadas.map((d) => d.codigo),
+    obrigatorias: obrigatorias.map((d) => d.codigo),
+    optativas: optativas.map((d) => d.codigo),
+  });
 
   return { obrigatorias, optativas, aprovadas };
 }

@@ -5,7 +5,7 @@
   "ciclo_basico": [
     { "codigo": "ICP131", "nome": "Programação de Computadores I", "periodo": 1, "aceitos": ["ICP131", "MAB120"], "aceitos_conjunto": [["MAB121", "CMT012"]] },
     { "codigo": "ICP132", "nome": "Processos de Software", "periodo": 1, "aceitos": ["ICP132", "MAB112"] },
-    { "codigo": "ICP133", "nome": "Fund. de Sist. da Computação", "periodo": 1, "aceitos": ["ICP133", "MAB111"] },
+    { "codigo": "ICP133", "nome": "Fund. de Sist. da Computação", "periodo": 1, "aceitos": ["ICP133", "ICP111", "MAB111"] },
     { "codigo": "ICP134", "nome": "Números Inteiros e Criptografia", "periodo": 1, "aceitos": ["ICP134", "MAB624"] },
     { "codigo": "ICP135", "nome": "Projeto de Carreira", "periodo": 1, "aceitos": ["ICP135", "ICP007"] },
     { "codigo": "ICP136", "nome": "Introdução ao Pensamento Dedutivo", "periodo": 1, "aceitos": ["ICP136"] },

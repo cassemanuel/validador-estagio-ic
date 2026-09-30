@@ -63,6 +63,18 @@ def test_equivalencias_diretas_mac():
     assert verificar_elegibilidade(h, regras)["apto"]
 
 
+def test_icp133_aceita_legados_icp111_mab111():
+    regras = _regras()
+    for legado in ("ICP111", "MAB111"):
+        h = _historico_completo(regras)
+        for d in h["periodos"][0]["disciplinas"]:
+            if d["codigo"] == "ICP133":
+                d["codigo"] = legado
+        assert verificar_elegibilidade(h, regras)["apto"], (
+            f"{legado} deveria cobrir ICP133"
+        )
+
+
 def test_icp249_tecnologia_sociedade_com_icp354():
     regras = _regras()
     codigos = [r["codigo"] for r in regras["ciclo_basico"]]

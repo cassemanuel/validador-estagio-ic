@@ -141,3 +141,15 @@ test('ICP249 é o requisito de Tecnologia e Sociedade e ICP354 o cobre', () => {
   h.resumo = calcularCRAcumulado(h);
   assert.ok(verificarElegibilidadeEstagio(h, regras).apto);
 });
+
+test('ICP111 e MAB111 (legados) cobrem o requisito ICP133', () => {
+  for (const legado of ['ICP111', 'MAB111']) {
+    const h = historicoApto();
+    h.periodos[0].disciplinas.find((d) => d.codigo === 'ICP133').codigo = legado;
+    h.resumo = calcularCRAcumulado(h);
+    assert.ok(
+      verificarElegibilidadeEstagio(h, regras).apto,
+      `${legado} deveria cobrir ICP133`
+    );
+  }
+});
