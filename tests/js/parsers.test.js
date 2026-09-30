@@ -12,7 +12,10 @@ import {
   parseDisciplinaLine,
   parseHistorico,
 } from '../../frontend/js/parsers/pdfParser.js';
-import { parsePaginaBOA } from '../../frontend/js/parsers/boaParser.js';
+import {
+  extrairMetadataBOA,
+  parsePaginaBOA,
+} from '../../frontend/js/parsers/boaParser.js';
 
 const LINHAS_BOLETIM = [
   // O marcador isolado Ã© filtrado por limparLinhas; no documento real ele
@@ -96,26 +99,65 @@ test('coluna com aprovaÃ§Ã£o na zona superior nÃ£o Ã© pendÃªncia', () => {
 test('parsePaginaBOA retorna disciplinas aprovadas da zona superior', () => {
   const itens = [
     ...ITENS_BOA,
-    { str: 'MAB115', x: 100, y: 500 }, // código da atividade aprovada
-    { str: 'Álgebra Linear', x: 100, y: 520 }, // nome na zona aprovada
-    { str: 'AP', x: 100, y: 560 }, // letra de aprovação
+    { str: 'MAB115', x: 100, y: 500 }, // cï¿½digo da atividade aprovada
+    { str: 'ï¿½lgebra Linear', x: 100, y: 520 }, // nome na zona aprovada
+    { str: 'AP', x: 100, y: 560 }, // letra de aprovaï¿½ï¿½o
     { str: '8.5', x: 100, y: 540 }, // grau
   ];
   const { obrigatorias, aprovadas } = parsePaginaBOA(itens, {
     credRecomY: 277,
     perY: 356,
   });
-  assert.equal(obrigatorias.length, 0); // coluna cumprida não é pendência
+  assert.equal(obrigatorias.length, 0); // coluna cumprida nï¿½o ï¿½ pendï¿½ncia
   const ap = aprovadas.find((d) => d.codigo === 'MAB115');
   assert.ok(ap);
   assert.equal(ap.situacao, 'AP');
   assert.equal(ap.grau, 8.5);
 });
 
-test('BOA sem aprovação não retorna aprovadas', () => {
+test('BOA sem aprovaï¿½ï¿½o nï¿½o retorna aprovadas', () => {
   const { aprovadas } = parsePaginaBOA(ITENS_BOA, {
     credRecomY: 277,
     perY: 356,
   });
   assert.equal(aprovadas.length, 0);
+});
+
+test('coluna com registro na zona superior marca o requisito como cumprido', () => {
+  // Coluna da disciplina recomendada ICP115 com aprovaÃ§Ã£o equivalente na
+  // zona superior â€” o requisito conta como concluÃ­do para o ciclo bÃ¡sico.
+  const itens = [
+    ...ITENS_BOA,
+    { str: 'MAB115', x: 100, y: 500 },
+  ];
+  const { obrigatorias, cumpridos } = parsePaginaBOA(itens, {
+    credRecomY: 277,
+    perY: 356,
+  });
+  assert.equal(obrigatorias.length, 0);
+  assert.deepEqual(cumpridos.map((c) => c.codigo), ['ICP115']);
+});
+
+test('extrairMetadataBOA captura nome, DRE e curso do cabeÃ§alho', () => {
+  const items = [
+    { str: 'BOLETIM DE ORIENTACAO ACADEMICA', x: 10, y: 800 },
+    { str: 'Aluno: JOAO DA SILVA', x: 10, y: 780 },
+    { str: 'Matricula: 123456789', x: 10, y: 760 },
+    { str: '85783 - CiÃªncia da ComputaÃ§Ã£o', x: 10, y: 740 },
+  ];
+  const meta = extrairMetadataBOA(items);
+  assert.equal(meta.nome, 'JOAO DA SILVA');
+  assert.equal(meta.dre, '123456789');
+  assert.equal(meta.curso, '85783 - CiÃªncia da ComputaÃ§Ã£o');
+});
+
+test('extrairMetadataBOA: fallback de DRE isolado e nome no topo', () => {
+  const items = [
+    { str: 'BOLETIM DE ORIENTACAO ACADEMICA', x: 10, y: 800 },
+    { str: 'MARIA APARECIDA SOUZA', x: 10, y: 770 },
+    { str: '987654321', x: 300, y: 770 },
+  ];
+  const meta = extrairMetadataBOA(items);
+  assert.equal(meta.dre, '987654321');
+  assert.equal(meta.nome, 'MARIA APARECIDA SOUZA');
 });

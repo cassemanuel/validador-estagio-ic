@@ -110,6 +110,20 @@ function renderStatus(container, sub) {
             sub.decisao.motivo ? el('p', {}, `Motivo: ${sub.decisao.motivo}`) : null,
           ])
         : null,
+      sub.autorizacao
+        ? el('div', {
+            className: `card card-autorizacao ${sub.autorizacao.expirada ? 'card-aviso' : ''}`,
+          }, [
+            el('strong', {},
+              `Autorização de estágio ${sub.autorizacao.expirada ? 'expirada' : 'vigente'}`),
+            el('p', {},
+              `Liberada em ${new Date(sub.autorizacao.liberadaEm).toLocaleDateString('pt-BR')} · ` +
+              `válida até ${new Date(sub.autorizacao.validaAte).toLocaleDateString('pt-BR')}` +
+              (sub.autorizacao.expirada
+                ? ''
+                : ` (${sub.autorizacao.diasParaVencer} dias restantes)`)),
+          ])
+        : null,
       sub.status === 'devolvida'
         ? el('p', { className: 'card-aviso-texto' },
             'Corrija os dados apontados pela Comissão e reenvie abaixo.')
@@ -173,6 +187,8 @@ async function handlePDF(file, { progress, progressBar }) {
       obrigatorias: [],
       optativas: [],
       aprovadas: [],
+      cumpridos: [],
+      metadata: {},
     }));
     if (progressBar) progressBar.style.width = '100%';
 
@@ -182,16 +198,18 @@ async function handlePDF(file, { progress, progressBar }) {
     };
 
     // O BOA também lista as disciplinas já aprovadas (zona superior de cada
-    // coluna). Elas alimentam o ciclo básico/CR quando o documento não é o
-    // boletim — sem isso, todo o ciclo aparecia como pendente.
-    const aprovadasBOA = boa.aprovadas || [];
-    if (aprovadasBOA.length) {
+    // coluna). `aprovadas` traz o código da atividade cursada; `cumpridos`
+    // marca o código do requisito da coluna como concluído quando há
+    // registro na zona superior (AP/T/grau) — cobre equivalências ainda
+    // não mapeadas. Sem isso, num BOA todo o ciclo básico ficava pendente.
+    const concluidasBOA = [...(boa.aprovadas || []), ...(boa.cumpridos || [])];
+    if (concluidasBOA.length) {
       const existentes = new Set(
         historico.periodos.flatMap((p) =>
           (p.disciplinas || []).map((d) => d.codigo)
         )
       );
-      const novas = aprovadasBOA.filter((d) => !existentes.has(d.codigo));
+      const novas = concluidasBOA.filter((d) => !existentes.has(d.codigo));
       if (novas.length) {
         historico.periodos.push({
           periodo: 'Aprovadas (BOA)',
@@ -201,6 +219,14 @@ async function handlePDF(file, { progress, progressBar }) {
       }
       if (!historico.metadata.tipoDocumento) {
         historico.metadata.tipoDocumento = 'boa';
+      }
+    }
+
+    // Cabeçalho do BOA: preenche nome/DRE/curso que o parser de linhas
+    // do boletim não encontra nesse layout.
+    for (const campo of ['nome', 'dre', 'curso']) {
+      if (!historico.metadata[campo] && boa.metadata?.[campo]) {
+        historico.metadata[campo] = boa.metadata[campo];
       }
     }
 

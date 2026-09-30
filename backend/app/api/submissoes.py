@@ -14,6 +14,7 @@ from ..models import Decisao, Excecao, Submissao, Usuario
 from ..schemas import SubmissaoPayload
 from ..services import saneamento, triagem
 from ..services.auditoria import registrar
+from ..services.autorizacao import dados_autorizacao
 from .deps import get_regras
 
 router = APIRouter(prefix="/api/submissoes", tags=["submissoes"])
@@ -47,6 +48,7 @@ def _serializar(sub: Submissao, decisao=None) -> dict:
         ],
         "criadoEm": sub.criado_em.isoformat() if sub.criado_em else None,
         "concluidoEm": sub.concluido_em.isoformat() if sub.concluido_em else None,
+        "autorizacao": dados_autorizacao(sub, settings.autorizacao_validade_dias),
     }
     if decisao:
         resultado["decisao"] = {

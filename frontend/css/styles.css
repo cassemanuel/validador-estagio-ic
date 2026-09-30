@@ -1797,3 +1797,67 @@ table .btn {
   background: var(--cor-ic1-light, #8fb0e8);
   color: #0f172a;
 }
+
+/* ============================================================
+   Tabela de triagem da comissão + autorizações
+   ============================================================ */
+
+.triage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.triage-table th,
+.triage-table td {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  text-align: left;
+  border-bottom: 1px solid var(--divider-color);
+  vertical-align: top;
+}
+
+.triage-table thead th {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.triage-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Linha 100% apta: aprovação imediata com selo verde */
+.triage-table tr.triage-ok {
+  background-color: var(--status-ap-bg);
+  box-shadow: inset 4px 0 0 var(--status-ap);
+}
+
+.triage-table tr.triage-ok:hover {
+  background-color: var(--status-ap-bg);
+  filter: brightness(0.97);
+}
+
+[data-theme="dark"] .triage-table tr.triage-ok {
+  background-color: rgb(22 163 74 / 0.15);
+}
+
+.triage-table .actions-row {
+  gap: var(--spacing-xs);
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.triage-table .badge {
+  margin-right: 4px;
+}
+
+/* Linha de autorização expirada */
+.triage-table tr.row-expirada td {
+  color: var(--text-muted);
+}
+
+.card-autorizacao {
+  border-left: 4px solid var(--status-ap);
+}

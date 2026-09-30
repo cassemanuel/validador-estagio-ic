@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     purge_interval_seconds: int = 3600
     max_pdf_size: int = 10 * 1024 * 1024
 
+    # Autorização de estágio: validade após a liberação (dias)
+    autorizacao_validade_dias: int = 90
+
     # Métricas: autorizações consideradas "próximas do vencimento"
     vencimento_alerta_dias: int = 30
 

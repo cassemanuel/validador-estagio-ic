@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from ..models import Submissao
+from .autorizacao import dados_autorizacao
 
 
 def semestre_letivo(dt: datetime | None = None) -> dict:
@@ -38,15 +39,18 @@ def calcular_metricas(db: Session, settings) -> dict:
         1 for s in subs if s.criado_em and sem["inicio"] <= _aware(s.criado_em) <= sem["fim"]
     )
 
-    # Autorizações próximas do vencimento: processos aprovados cujo semestre
-    # letivo corrente termina dentro da janela de alerta configurada.
+    # Autorizações próximas do vencimento: aprovadas cuja validade
+    # (liberação + AUTORIZACAO_VALIDADE_DIAS) termina dentro da janela
+    # de alerta configurada.
     agora = datetime.now(timezone.utc)
     dias_para_fim = (sem["fim"] - agora).days
     aprovadas = [s for s in subs if s.status == "aprovada"]
-    vencendo = (
-        len(aprovadas)
-        if 0 <= dias_para_fim <= settings.vencimento_alerta_dias
-        else 0
+    vencendo = sum(
+        1
+        for s in aprovadas
+        if (aut := dados_autorizacao(s, settings.autorizacao_validade_dias))
+        and not aut["expirada"]
+        and aut["diasParaVencer"] <= settings.vencimento_alerta_dias
     )
 
     pendentes = por_status["fila_regular"] + por_status["mesa_revisao"]
@@ -64,6 +68,15 @@ def calcular_metricas(db: Session, settings) -> dict:
         "fila_regular": por_status["fila_regular"],
         "mesa_revisao": por_status["mesa_revisao"],
         "autorizacoes_vencendo": vencendo,
+        "autorizacoes_vigentes": len(aprovadas)
+        - sum(
+            1
+            for s in aprovadas
+            if (aut := dados_autorizacao(s, settings.autorizacao_validade_dias))
+            and aut["expirada"]
+        ),
+        "janela_vencimento_dias": settings.vencimento_alerta_dias,
+        "validade_autorizacao_dias": settings.autorizacao_validade_dias,
         # Indicativo: todo deferido deve relatório de estágio ao fim do período.
         "relatorios": {"entregues": 0, "pendentes": por_status["aprovada"]},
     }

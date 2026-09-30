@@ -36,6 +36,9 @@ const STATUS_MAP = [
   ['cursando', 'cursando'],
 ];
 
+const DRE_REGEX = /\b(\d{9,10})\b/;
+const NOME_REGEX = /^[A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇ][A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇa-záàâãéèêíïóôõöúç]+(\s+[A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇa-záàâãéèêíïóôõöúç][A-Za-záàâãéèêíïóôõöúç.]*)+$/;
+
 const MAX_PDF_PAGES = 25;
 
 // Parâmetros de layout da tabela do BOA (coordenadas do documento do SIGA).
@@ -191,10 +194,66 @@ function agruparPorColuna(items) {
 }
 
 /**
+ * Extrai metadados do cabeçalho do BOA (layout em linhas rotuladas,
+ * diferente do Boletim). Busca DRE (9–10 dígitos), nome do discente
+ * (linha "Aluno"/"Nome" ou texto em nome próprio no topo) e curso.
+ * @param {Array<{str: string, x: number, y: number}>} items Itens da 1ª página.
+ * @returns {{nome: string|null, dre: string|null, curso: string|null}}
+ */
+export function extrairMetadataBOA(items) {
+  const meta = { nome: null, dre: null, curso: null };
+  if (!items?.length) return meta;
+
+  for (const it of items) {
+    const s = it.str;
+
+    // Rótulo embutido no próprio texto: "Aluno: NOME", "Matrícula: 123...".
+    if (!meta.nome) {
+      const m = s.match(/\b(?:aluno|nome)\b\s*[:\-–]?\s*(.+)$/i);
+      if (m && NOME_REGEX.test(m[1].trim())) {
+        meta.nome = m[1].trim();
+      }
+    }
+    if (!meta.dre) {
+      const m = s.match(/(?:dre|matr[íi]cula|registro)\s*[:\-–]?\s*(\d{9,10})/i);
+      if (m) meta.dre = m[1];
+    }
+    if (!meta.curso) {
+      const m = s.match(/(\d{4,5}\s*-\s*[A-Za-zÁ-ú\s]+)/);
+      if (m) meta.curso = m[1].trim();
+    }
+  }
+
+  // Fallbacks: DRE isolado (9–10 dígitos) e nome em caixa alta no topo.
+  if (!meta.dre) {
+    const item = items.find((it) => DRE_REGEX.test(it.str));
+    if (item) meta.dre = item.str.match(DRE_REGEX)[1];
+  }
+  if (!meta.nome) {
+    // Títulos institucionais do cabeçalho não são nomes de pessoa.
+    const naoNome =
+      /boletim|orienta|acad[eê]mica|ufrj|universidade|instituto|centro|p[áa]gina|emiss[ãa]o|gradua[çc][ãa]o|bacharelado/i;
+    const yMax = Math.max(...items.map((it) => it.y));
+    const topo = items
+      .filter(
+        (it) =>
+          it.y > yMax - 120 &&
+          NOME_REGEX.test(it.str.trim()) &&
+          !naoNome.test(normalize(it.str))
+      )
+      .sort((a, b) => b.y - a.y || a.x - b.x);
+    if (topo.length) meta.nome = topo[0].str.trim();
+  }
+
+  console.debug('[boaParser] metadados:', meta);
+  return meta;
+}
+
+/**
  * Extrai disciplinas pendentes e já aprovadas dos itens de uma página.
  * @param {Array<{str: string, x: number, y: number}>} items
  * @param {{credRecomY: number, perY: number}} faixas Valores de referência das linhas.
- * @returns {{obrigatorias: Array<object>, optativas: Array<object>, aprovadas: Array<object>, credRecomY: number, perY: number}}
+ * @returns {{obrigatorias: Array<object>, optativas: Array<object>, aprovadas: Array<object>, cumpridos: Array<object>, credRecomY: number, perY: number}}
  */
 export function parsePaginaBOA(items, faixas) {
   let { credRecomY, perY } = faixas;
@@ -236,8 +295,10 @@ export function parsePaginaBOA(items, faixas) {
   const obrigatorias = [];
   const optativas = [];
   const aprovadas = [];
+  const cumpridos = [];
   const vistos = new Set();
   const vistosAprovadas = new Set();
+  const vistosCumpridos = new Set();
 
   for (const coluna of agruparPorColuna(items)) {
     try {
@@ -330,7 +391,21 @@ export function parsePaginaBOA(items, faixas) {
             LETRAS_APROVACAO.has(it.str.toUpperCase()))
       );
       if (aprovado) {
-        console.debug(`[boaParser] ${codigo} descartada: aprovada na zona superior.`);
+        // Regra do estágio (PPC 2022): coluna com registro na zona superior
+        // (aprovação AP, aproveitamento T, grau) conta como CONCLUÍDA mesmo
+        // quando o código cursado difere do recomendado — a equivalência é
+        // resolvida depois pela lista `aceitos` ou pela comissão.
+        if (vistosCumpridos.has(codigo)) continue;
+        vistosCumpridos.add(codigo);
+        cumpridos.push({
+          codigo,
+          nome: ordenados.find((it) => !isCabecalhoOuLabel(it.str))?.str || codigo,
+          situacao: 'AP',
+          grau: null,
+          crR: LAYOUT_CONFIG.CREDITOS_PADRAO,
+          fonte: 'boa_coluna_cumprida',
+        });
+        console.debug(`[boaParser] ${codigo} concluída (zona de aprovadas).`);
         continue;
       }
 
@@ -365,21 +440,24 @@ export function parsePaginaBOA(items, faixas) {
     }
   }
 
-  return { obrigatorias, optativas, aprovadas, credRecomY, perY };
+  return { obrigatorias, optativas, aprovadas, cumpridos, credRecomY, perY };
 }
 
 /**
  * Processa um arquivo BOA e retorna pendências e disciplinas aprovadas.
  * @param {ArrayBuffer | Uint8Array} pdfData
- * @returns {Promise<{obrigatorias: Array<object>, optativas: Array<object>, aprovadas: Array<object>}>}
+ * @returns {Promise<{obrigatorias: Array<object>, optativas: Array<object>, aprovadas: Array<object>, cumpridos: Array<object>, metadata: object}>}
  */
 export async function processarBOA(pdfData, pdfjsLib) {
   const paginas = await extractBOAItems(pdfData, pdfjsLib);
   const obrigatorias = [];
   const optativas = [];
   const aprovadas = [];
+  const cumpridos = [];
   const vistos = new Set();
   const vistosAprovadas = new Set();
+  const vistosCumpridos = new Set();
+  const metadata = paginas.length ? extrairMetadataBOA(paginas[0]) : {};
 
   // As faixas de Y são calibradas pelos rótulos de cada página e carregadas
   // para a página seguinte (a continuação da tabela repete o mesmo layout).
@@ -414,14 +492,21 @@ export async function processarBOA(pdfData, pdfjsLib) {
         aprovadas.push(d);
       }
     }
+    for (const d of resultado.cumpridos || []) {
+      if (!vistosCumpridos.has(d.codigo)) {
+        vistosCumpridos.add(d.codigo);
+        cumpridos.push(d);
+      }
+    }
   }
 
   console.debug('[boaParser] resumo do documento:', {
     paginas: paginas.length,
     aprovadas: aprovadas.map((d) => d.codigo),
+    cumpridos: cumpridos.map((d) => d.codigo),
     obrigatorias: obrigatorias.map((d) => d.codigo),
     optativas: optativas.map((d) => d.codigo),
   });
 
-  return { obrigatorias, optativas, aprovadas };
+  return { obrigatorias, optativas, aprovadas, cumpridos, metadata };
 }

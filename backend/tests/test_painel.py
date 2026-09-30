@@ -116,3 +116,34 @@ def test_arquivamento_preserva_cadeia(client, tmp_path):
     with SessionLocal() as db:
         assert db.query(AuditLog).count() >= 2
         assert verificar_cadeia(db)
+
+
+def test_autorizacoes_validade_90_dias(client):
+    """Deferimento gera autorização com validade = liberação + 90 dias."""
+    from datetime import datetime
+
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+
+    login(client, "comissao1", "comissao123")
+    client.post(
+        f"/api/comissao/submissoes/{sub['id']}/decisao",
+        json={"decisao": "aprovada"},
+    )
+
+    resp = client.get("/api/comissao/autorizacoes")
+    assert resp.status_code == 200
+    auts = resp.json()["autorizacoes"]
+    assert len(auts) == 1
+    a = auts[0]
+    assert a["status"] == "vigente"
+    assert a["nome"] == "Aluno Exemplo"
+    lib = datetime.fromisoformat(a["liberadaEm"])
+    val = datetime.fromisoformat(a["validaAte"])
+    assert (val - lib).days == 90
+
+    # O discente também vê a autorização na própria submissão.
+    login(client, "aluno1", "aluno123")
+    minha = client.get("/api/submissoes/minha").json()["submissao"]
+    assert minha["autorizacao"]["validaAte"] == a["validaAte"]
+    assert not minha["autorizacao"]["expirada"]

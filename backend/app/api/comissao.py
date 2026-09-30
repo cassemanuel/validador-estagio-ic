@@ -14,6 +14,7 @@ from ..db import get_db
 from ..models import AuditLog, Decisao, Excecao, Submissao, Usuario
 from ..schemas import DecisaoIn
 from ..services.auditoria import registrar
+from ..services.autorizacao import dados_autorizacao
 from ..services.metricas import calcular_metricas
 
 router = APIRouter(prefix="/api/comissao", tags=["comissao"])
@@ -46,6 +47,7 @@ def _serializar_resumo(sub: Submissao) -> dict:
             for e in sub.excecoes
         ],
         "criadoEm": sub.criado_em.isoformat() if sub.criado_em else None,
+        "autorizacao": dados_autorizacao(sub, settings.autorizacao_validade_dias),
     }
 
 
@@ -116,6 +118,37 @@ def auditoria(
             for reg, username in rows
         ]
     }
+
+
+@router.get("/autorizacoes")
+def autorizacoes(
+    db: Session = Depends(get_db), _=Depends(require_comissao)
+):
+    """Liberações deferidas com validade (liberação + N dias)."""
+    subs = (
+        db.query(Submissao)
+        .filter(Submissao.status == "aprovada")
+        .order_by(Submissao.concluido_em.desc())
+        .all()
+    )
+    linhas = []
+    for s in subs:
+        aut = dados_autorizacao(s, settings.autorizacao_validade_dias)
+        if not aut:
+            continue
+        metadata = json.loads(s.metadata_json)
+        linhas.append(
+            {
+                "id": s.id,
+                "nome": metadata.get("nome"),
+                "dre": metadata.get("dre"),
+                "liberadaEm": aut["liberadaEm"],
+                "validaAte": aut["validaAte"],
+                "diasParaVencer": aut["diasParaVencer"],
+                "status": "expirada" if aut["expirada"] else "vigente",
+            }
+        )
+    return {"autorizacoes": linhas}
 
 
 @router.get("/submissoes/{sub_id}")

@@ -35,10 +35,11 @@ export function ativarFila(tipo) {
   carregarFila();
 }
 
-/** Recarrega métricas, auditoria e fila — após decisões ou na abertura. */
+/** Recarrega métricas, auditoria, autorizações e fila. */
 export function carregarPainel() {
   carregarMetricas();
   carregarAuditoria();
+  carregarAutorizacoes();
   carregarFila();
 }
 
@@ -97,7 +98,10 @@ async function carregarMetricas() {
     {
       label: 'Autorizações a vencer',
       valor: `${vencendo}`,
-      detalhe: `fim do período ${m.fim_periodo} (${m.dias_para_fim_periodo}d)`,
+      detalhe:
+        `${m.autorizacoes_vigentes ?? m.deferidos} vigentes · ` +
+        `validade ${m.validade_autorizacao_dias ?? 90}d · ` +
+        `alerta ≤ ${m.janela_vencimento_dias ?? 30}d`,
       cls: vencendo > 0 ? 'metric-alerta' : '',
     },
     {
@@ -202,7 +206,71 @@ async function carregarAuditoria() {
 }
 
 /* ============================================================
-   Fila
+   Autorizações (liberação + validade)
+   ============================================================ */
+
+const fmtData = (iso) =>
+  iso ? new Date(iso).toLocaleDateString('pt-BR') : '—';
+
+async function carregarAutorizacoes() {
+  const container = document.getElementById('comissao-autorizacoes');
+  clearElement(container);
+
+  let autorizacoes;
+  try {
+    ({ autorizacoes } = await api('/api/comissao/autorizacoes'));
+  } catch {
+    return;
+  }
+
+  const corpo = autorizacoes.length
+    ? autorizacoes.map((a) =>
+        el('tr', { className: a.status === 'expirada' ? 'row-expirada' : '' }, [
+          el('td', {}, fmtData(a.liberadaEm)),
+          el('td', {}, a.nome || '—'),
+          el('td', {}, a.dre || '—'),
+          el('td', {}, [
+            el('span', {
+              className: `badge ${a.status === 'vigente' ? 'badge-ap' : 'badge-reprovado'}`,
+            }, a.status === 'vigente' ? 'Vigente' : 'Expirada'),
+          ]),
+          el('td', {},
+            `${fmtData(a.validaAte)}` +
+              (a.status === 'vigente' ? ` (${a.diasParaVencer}d)` : '')),
+        ])
+      )
+    : [
+        el('tr', {}, [
+          el('td', { colspan: '5', className: 'text-muted' },
+            'Nenhuma autorização emitida.'),
+        ]),
+      ];
+
+  container.appendChild(
+    el('div', { className: 'card audit-card' }, [
+      el('h3', { id: 'autorizacoes-titulo' }, 'Autorizações de Estágio'),
+      el('p', { className: 'text-muted' },
+        'Liberações deferidas pela comissão. Validade: liberação + 90 dias.'),
+      el('div', { className: 'table-container' }, [
+        el('table', { className: 'triage-table' }, [
+          el('thead', {}, [
+            el('tr', {}, [
+              el('th', { scope: 'col' }, 'Data da Liberação'),
+              el('th', { scope: 'col' }, 'Nome do Aluno'),
+              el('th', { scope: 'col' }, 'DRE'),
+              el('th', { scope: 'col' }, 'Status'),
+              el('th', { scope: 'col' }, 'Validade da Autorização'),
+            ]),
+          ]),
+          el('tbody', {}, corpo),
+        ]),
+      ]),
+    ])
+  );
+}
+
+/* ============================================================
+   Fila — tabela de triagem
    ============================================================ */
 
 export async function carregarFila() {
@@ -223,29 +291,72 @@ export async function carregarFila() {
     return;
   }
 
-  const lista = el('div', { className: 'fila-list' },
-    submissoes.map(renderCard));
-  container.appendChild(lista);
+  container.appendChild(
+    el('div', { className: 'card table-container' }, [
+      el('table', { className: 'triage-table' }, [
+        el('thead', {}, [
+          el('tr', {}, [
+            el('th', { scope: 'col' }, 'Nome'),
+            el('th', { scope: 'col' }, 'DRE'),
+            el('th', { scope: 'col' }, 'Curso'),
+            el('th', { scope: 'col' }, 'Critérios'),
+            el('th', { scope: 'col' }, 'Status'),
+            el('th', { scope: 'col' }, 'Ação Rápida'),
+          ]),
+        ]),
+        el('tbody', {}, submissoes.map(renderLinha)),
+      ]),
+    ])
+  );
 }
 
-function renderCard(sub) {
+function renderLinha(sub) {
   const { metadata, diagnostico, alertas, excecoes } = sub;
   const apto = diagnostico?.apto;
+  const criterios = diagnostico?.criterios || [];
+  const ok = criterios.filter((c) => c.ok).length;
 
-  const meta = el('div', { className: 'fila-meta' }, [
-    el('strong', {}, metadata?.nome || 'Nome não identificado'),
-    el('span', { className: 'text-muted' },
-      `DRE ${metadata?.dre || '—'} · ${sub.tipoDocumento || 'doc.'} · ` +
-      `enviado em ${new Date(sub.criadoEm).toLocaleDateString('pt-BR')}`),
-    el('span', { className: 'text-muted' },
-        diagnostico?.criterios?.length
-        ? diagnostico.criterios.map((c) => `${c.ok ? '✓' : '✗'} ${c.rotulo}`).join(' · ')
-        : ''),
-  ]);
+  // Aprovação imediata: 100% apto, sem exceções declaradas nem alertas
+  // de saneamento — o caso regular dispensa conferência manual.
+  const aprovacaoImediata =
+    filaAtual === 'regular' && apto && !excecoes?.length && !alertas?.length;
 
-  const badges = el('div', { className: 'fila-badges' }, [
-    el('span', { className: `badge ${apto ? 'badge-ap' : 'badge-cursando'}` },
-      apto ? 'Apto' : 'Pendente'),
+  const acoes = el('td', { className: 'actions-row' });
+  if (aprovacaoImediata) {
+    const btnDeferir = el('button', {
+      className: 'btn btn-primary btn-sm',
+      type: 'button',
+      title: 'Deferir em 1 clique',
+    }, 'Deferir');
+    btnDeferir.addEventListener('click', async () => {
+      btnDeferir.disabled = true;
+      try {
+        await api(`/api/comissao/submissoes/${sub.id}/decisao`, {
+          method: 'POST',
+          body: { decisao: 'aprovada' },
+        });
+        carregarPainel();
+      } catch (err) {
+        alert(err.message);
+        btnDeferir.disabled = false;
+      }
+    });
+    acoes.appendChild(btnDeferir);
+  }
+
+  const btnRevisar = el('button', {
+    className: 'btn btn-secondary btn-sm',
+    type: 'button',
+  }, 'Revisar');
+  btnRevisar.addEventListener('click', () => abrirMesa(sub.id));
+  acoes.appendChild(btnRevisar);
+
+  const statusCell = el('td', {}, [
+    aprovacaoImediata
+      ? el('span', { className: 'badge badge-ap' }, 'Apto — aprovação imediata')
+      : el('span', {
+          className: `badge ${apto ? 'badge-cursando' : 'badge-neutro'}`,
+        }, apto ? 'Apto' : 'Pendências'),
     excecoes?.length
       ? el('span', { className: 'badge badge-neutro' },
           `${excecoes.length} exceção(ões)`)
@@ -256,41 +367,18 @@ function renderCard(sub) {
       : null,
   ]);
 
-  const acoes = el('div', { className: 'actions-row' });
-
-  if (filaAtual === 'regular' && apto) {
-    const btnAprovar = el('button', {
-      className: 'btn btn-primary btn-sm',
-      type: 'button',
-    }, 'Aprovar');
-    btnAprovar.addEventListener('click', async () => {
-      if (!confirm(`Aprovar a submissão de ${metadata?.nome || 'este discente'}?`)) {
-        return;
-      }
-      btnAprovar.disabled = true;
-      try {
-        await api(`/api/comissao/submissoes/${sub.id}/decisao`, {
-          method: 'POST',
-          body: { decisao: 'aprovada' },
-        });
-        carregarPainel();
-      } catch (err) {
-        alert(err.message);
-        btnAprovar.disabled = false;
-      }
-    });
-    acoes.appendChild(btnAprovar);
-  }
-
-  const btnRevisar = el('button', {
-    className: 'btn btn-secondary btn-sm',
-    type: 'button',
-  }, 'Revisar');
-  btnRevisar.addEventListener('click', () => abrirMesa(sub.id));
-  acoes.appendChild(btnRevisar);
-
-  return el('div', { className: 'card fila-card' }, [
-    el('div', { className: 'fila-info' }, [meta, badges]),
+  return el('tr', { className: aprovacaoImediata ? 'triage-ok' : '' }, [
+    el('td', {}, [
+      el('strong', {}, metadata?.nome || 'Nome não identificado'),
+      el('br'),
+      el('span', { className: 'text-muted' },
+        `enviado em ${fmtData(sub.criadoEm)}`),
+    ]),
+    el('td', {}, metadata?.dre || '—'),
+    el('td', {}, metadata?.curso || '—'),
+    el('td', {},
+      criterios.length ? `${ok}/${criterios.length} critérios` : '—'),
+    statusCell,
     acoes,
   ]);
 }
