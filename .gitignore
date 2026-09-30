@@ -9,13 +9,24 @@ data/
 *.json
 !package.json
 !package-lock.json
+!frontend/rules/*.json
+!backend/**/rules/*.json
+!tests/fixtures/*.json
+
+# Banco de dados SQLite e artefatos do backend
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+.venv/
+.pytest_cache/
 
 # Logs e arquivos do sistema operacional
 .DS_Store
 Thumbs.db
 *.log
 
-# Dependências e caches (caso sejam adicionadas no futuro)
+# Dependências e caches
 node_modules/
 .cache/
 

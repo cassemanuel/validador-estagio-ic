@@ -1,32 +1,104 @@
-# Análise Acadêmica BCC – IC/UFRJ
+# Validador de Estágio — BCC/IC/UFRJ
 
-Plataforma **100% client-side** para estudantes do Bacharelado em Ciência da Computação da UFRJ analisarem sua evolução acadêmica, diagnosticarem o cumprimento do PPC 2022 e planejarem os próximos semestres. 
+Plataforma institucional de **triagem e validação de elegibilidade para estágio
+curricular** de discentes do Bacharelado em Ciência da Computação (UFRJ),
+conforme o PPC 2022 (Anexo C, Art. 4º — Programa de Estágio).
 
-Toda a extração de dados ocorre a partir do **Boletim Não Oficial** ou do **BOA** diretamente no seu navegador.
+## Arquitetura
 
-## Como utilizar
+Monorepo cliente-servidor:
 
-1. Inicie um servidor estático local na raiz do projeto:
-   ```bash
-   npx serve
-   # ou
-   python -m http.server 8080
-   ```
-2. Acesse `http://localhost:8080` (ou a porta correspondente).
-3. Na aba **Histórico**, faça upload do seu Boletim Não Oficial do SIGA.
-4. Navegue pelas abas para visualizar o seu **Planejamento Pedagógico** (importando pendências do BOA) e a sua **Análise e Evolução** (CR por eixos temáticos e elegibilidade para estágio).
+- **`frontend/`** — SPA vanilla JS (sem build), servida como estático pelo
+  backend. O parsing do BOA/Boletim (pdf.js vendored em `frontend/vendor/`)
+  roda **no navegador**: o PDF só é enviado ao servidor após a confirmação
+  interativa do discente.
+- **`backend/`** — FastAPI + SQLite (modo WAL) em Docker. Persistência de
+  submissões, exceções, decisões e `audit_log` imutável (append-only com
+  hash chain sha256).
+- **`frontend/rules/ciclo_basico.json`** — fonte única das regras do PPC 2022,
+  consumida pelo frontend (diagnóstico preliminar) e pelo backend
+  (sanity check em `backend/app/rules/ppc2022.py`).
 
-## Segurança e Privacidade
+## Fluxo
 
-Esta ferramenta foi projetada com foco absoluto na proteção dos dados acadêmicos do aluno. **Nenhum arquivo ou dado trafega pela rede.** Toda a infraestrutura roda na memória da sua aba.
+**Discente**: login → upload do BOA/Boletim → parsing local → confirmação dos
+dados extraídos com declaração de exceções estruturadas (equivalência /
+dispensa / aproveitamento) → diagnóstico preliminar → submissão.
 
-* **Arquitetura Client-Side:** Não há backend. O `pdf.js` roda isolado em um Web Worker no navegador.
-* **Validação de Uploads:** Defesa ativa contra arquivos corrompidos ou maliciosos (limite estrito de tamanho, validação de MIME type e limite máximo de leitura de páginas por documento para evitar exaustão de recursos/ReDoS).
-* **Prevenção contra injeção de código:**
-  * O parser desativa execuções nativas do PDF (`isEvalSupported: false`).
-  * Não há uso de `innerHTML` na aplicação. Todo o DOM é construído de forma segura.
-  * Sanitização de links e proteção no parser JSON de exportação/importação.
-* **Armazenamento:** Persistência exclusivamente local (através de `localStorage`). 
+**Triagem automática** (`services/triagem.py`): submissão vai para a
+**Fila de Casos Regulares** (aprovação em 1 clique) quando o diagnóstico é
+apto, não há exceções e não há alertas de saneamento; caso contrário, vai
+para a **Mesa de Revisão** (split-screen: PDF original × dados extraídos).
+
+**Saneamento server-side** (`services/saneamento.py`): DRE do documento ×
+usuário autenticado, formato de códigos UFRJ, tipo de documento e recálculo
+independente da elegibilidade — divergências forçam revisão humana.
+
+## LGPD e governança
+
+- PDF bruto fora do banco (`data/uploads/`, sha256 registrado) e **expurgado**
+  após `PDF_RETENTION_DAYS` (default 30) da conclusão — job periódico em
+  `services/expurgo.py`.
+- `audit_log` registra logins, submissões, acessos ao PDF, decisões e
+  expurgos — nunca contém o documento nem dados pessoais além de ids.
+- Histórico do SIGA gera alerta automático (omite reprovações).
+
+## Como rodar
+
+### Docker (recomendado)
+
+```bash
+cp .env.example .env   # edite JWT_SECRET
+docker compose up --build
+# http://localhost:8000
+```
+
+### Desenvolvimento local
+
+```bash
+# Backend (porta 8000 serve API + frontend)
+python -m venv .venv && .venv\Scripts\activate   # ou source .venv/bin/activate
+pip install -r backend/requirements.txt
+cd backend && python -m uvicorn app.main:app --reload --port 8000
+```
+
+### Credenciais de desenvolvimento (SEED_USERS)
+
+| Usuário    | Senha        | Papel     |
+|------------|--------------|-----------|
+| `aluno1`   | `aluno123`   | discente  |
+| `comissao1`| `comissao123`| comissão  |
+
+### LDAP institucional
+
+Configure `AUTH_PROVIDER=ldap` e as variáveis `LDAP_*` no `.env`. O papel
+`comissao` deriva do grupo `LDAP_GROUP_COMISSAO` ou da lista
+`COMMISSION_USERS`. `LdapAuthProvider` fica atrás da interface
+`AuthProvider` — em dev, `LocalAuthProvider` usa os seeds acima.
+
+## Testes
+
+```bash
+# Backend (pytest): fluxo e2e — auth, submissão, triagem, decisão,
+# cadeia do audit_log e expurgo
+cd backend && python -m pytest tests/ -x -q
+
+# Frontend/rules (node --test): parsers sintéticos, motor de CR,
+# elegibilidade contra ciclo_basico.json
+npm test
+```
+
+## Endpoints principais
+
+| Método | Rota | Papel | Descrição |
+|---|---|---|---|
+| POST | `/api/auth/login` | — | Login (cookie httpOnly JWT) |
+| POST | `/api/submissoes` | discente | Multipart: PDF + dados extraídos |
+| GET | `/api/submissoes/minha` | discente | Submissão ativa + decisão |
+| GET | `/api/comissao/fila?tipo=regular\|revisao` | comissão | Filas |
+| GET | `/api/comissao/submissoes/{id}` | comissão | Dados + exceções + alertas |
+| GET | `/api/comissao/submissoes/{id}/pdf` | comissão | Stream do PDF (auditado) |
+| POST | `/api/comissao/submissoes/{id}/decisao` | comissão | Deliberação transacional |
 
 ## Licença
 

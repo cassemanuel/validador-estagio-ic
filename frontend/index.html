@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Validador de Estágio – IC/UFRJ</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Open+Sans:wght@400;600&display=swap"
+    rel="stylesheet"
+  />
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+  />
+
+  <!-- pdf.js vendored localmente (sem CDN) -->
+  <script src="vendor/pdfjs/pdf.min.js"></script>
+
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-brand">
+      <i class="bi bi-mortarboard-fill" aria-hidden="true"></i>
+      <div>
+        <h1>Validador de Estágio</h1>
+        <span>Comissão de Estágio — IC / UFRJ</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span id="user-badge" class="user-badge" hidden></span>
+      <button
+        id="logout-btn"
+        class="btn-icon"
+        type="button"
+        aria-label="Sair"
+        title="Sair"
+        hidden
+      >
+        <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+      </button>
+      <button
+        id="theme-toggle"
+        class="btn-icon"
+        type="button"
+        aria-label="Alternar tema"
+        title="Alternar tema"
+      >
+        <i class="bi bi-sun-fill" aria-hidden="true"></i>
+      </button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- ===== Login ===== -->
+    <section id="view-login" class="tab-panel" hidden>
+      <div class="card login-card">
+        <h2>Acesso ao Sistema</h2>
+        <p class="text-muted">
+          Plataforma de triagem e validação de elegibilidade para estágio
+          curricular do BCC. Use sua credencial institucional.
+        </p>
+        <form id="login-form" class="login-form">
+          <label>
+            Usuário
+            <input
+              type="text"
+              id="login-username"
+              autocomplete="username"
+              required
+            />
+          </label>
+          <label>
+            Senha
+            <input
+              type="password"
+              id="login-senha"
+              autocomplete="current-password"
+              required
+            />
+          </label>
+          <p id="login-erro" class="login-erro" role="alert" hidden></p>
+          <button type="submit" class="btn btn-primary">Entrar</button>
+        </form>
+        <div id="login-dev" class="login-dev" hidden>
+          <p class="text-muted">Acesso rápido (desenvolvimento):</p>
+          <div class="actions-row">
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              data-dev-login="aluno1"
+              data-dev-senha="aluno123"
+            >
+              Aluno 1
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              data-dev-login="aluno2"
+              data-dev-senha="aluno123"
+            >
+              Aluno 2
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              data-dev-login="aluno3"
+              data-dev-senha="aluno123"
+            >
+              Aluno 3
+            </button>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              data-dev-login="comissao1"
+              data-dev-senha="comissao123"
+            >
+              Comissão
+            </button>
+          </div>
+          <p class="text-muted login-dev-hint">
+            Credenciais de dev: <code>aluno1</code>–<code>aluno3 / aluno123</code>
+            (discente) · <code>comissao1 / comissao123</code> (comissão)
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Portal do Discente ===== -->
+    <section id="view-discente" class="tab-panel" hidden>
+      <div id="discente-status"></div>
+
+      <div id="discente-fluxo">
+        <div class="panel-header">
+          <h2>Submeter Boletim para Validação de Estágio</h2>
+          <p class="text-muted">
+            Envie o <strong>BOA</strong> ou o <strong>Boletim Não Oficial</strong>
+            do SIGA. O documento é lido no seu navegador e você confere os dados
+            antes de enviar à Comissão.
+          </p>
+        </div>
+
+        <div class="dropzone" id="pdf-dropzone">
+          <input
+            type="file"
+            id="pdf-input"
+            accept=".pdf,application/pdf"
+            aria-label="Selecionar PDF do boletim"
+          />
+          <label for="pdf-input" class="dropzone-label">
+            <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+            <span>Clique ou arraste o PDF aqui</span>
+          </label>
+          <div class="dropzone-hint">BOA ou Boletim Não Oficial do SIGA/UFRJ</div>
+        </div>
+
+        <div id="pdf-progress" class="progress hidden" aria-live="polite">
+          <div class="progress-bar" id="pdf-progress-bar"></div>
+        </div>
+
+        <div id="discente-revisao" hidden></div>
+      </div>
+    </section>
+
+    <!-- ===== Painel da Comissão ===== -->
+    <section id="view-comissao" class="tab-panel" hidden>
+      <div id="comissao-metricas"></div>
+
+      <nav class="app-nav segmented" aria-label="Filas da comissão">
+        <button class="tab-btn active" data-fila="regular" type="button" aria-pressed="true">
+          <i class="bi bi-lightning-charge" aria-hidden="true"></i>
+          Fila de Casos Regulares
+          <span class="seg-badge" id="badge-regular" hidden></span>
+        </button>
+        <button class="tab-btn" data-fila="revisao" type="button" aria-pressed="false">
+          <i class="bi bi-layout-split" aria-hidden="true"></i>
+          Mesa de Revisão
+          <span class="seg-badge" id="badge-revisao" hidden></span>
+        </button>
+      </nav>
+
+      <div id="comissao-fila"></div>
+      <div id="comissao-mesa" hidden></div>
+
+      <section id="comissao-auditoria" aria-labelledby="auditoria-titulo"></section>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>
+      Sistema institucional da Comissão de Estágio do IC/UFRJ. Dados tratados
+      conforme a LGPD.
+    </p>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "versao": "PPC 2022 — BCC/UFRJ (Anexo C, Art. 4º — Programa de Estágio)",
+  "cr_minimo": 6.0,
+  "max_periodos_integralizacao": 14,
+  "ciclo_basico": [
+    { "codigo": "ICP131", "nome": "Programação de Computadores I", "periodo": 1, "aceitos": ["ICP131", "MAB120"], "aceitos_conjunto": [["MAB121", "CMT012"]] },
+    { "codigo": "ICP132", "nome": "Processos de Software", "periodo": 1, "aceitos": ["ICP132", "MAB112"] },
+    { "codigo": "ICP133", "nome": "Fund. de Sist. da Computação", "periodo": 1, "aceitos": ["ICP133", "MAB111"] },
+    { "codigo": "ICP134", "nome": "Números Inteiros e Criptografia", "periodo": 1, "aceitos": ["ICP134", "MAB624"] },
+    { "codigo": "ICP135", "nome": "Projeto de Carreira", "periodo": 1, "aceitos": ["ICP135", "ICP007"] },
+    { "codigo": "ICP136", "nome": "Introdução ao Pensamento Dedutivo", "periodo": 1, "aceitos": ["ICP136"] },
+    { "codigo": "ICP141", "nome": "Programação de Computadores II", "periodo": 2, "aceitos": ["ICP141", "MAB120"], "aceitos_conjunto": [["MAB121", "CMT012"]] },
+    { "codigo": "ICP142", "nome": "Organização de Dados I", "periodo": 2, "aceitos": ["ICP142", "MAB113"] },
+    { "codigo": "ICP143", "nome": "Projeto Prático", "periodo": 2, "aceitos": ["ICP143", "MAB245"] },
+    { "codigo": "ICP144", "nome": "Matemática Discreta", "periodo": 2, "aceitos": ["ICP144", "MAB352"] },
+    { "codigo": "ICP145", "nome": "Habilidades Sociais para o Trabalho", "periodo": 2, "aceitos": ["ICP145", "ICP008"] },
+    { "codigo": "MAE111", "nome": "Cálculo Infinitesimal I", "periodo": 2, "aceitos": ["MAE111", "MAC118"] },
+    { "codigo": "ICP115", "nome": "Álgebra Linear Algorítmica", "periodo": 3, "aceitos": ["ICP115", "MAB115"] },
+    { "codigo": "ICP116", "nome": "Estrutura dos Dados", "periodo": 3, "aceitos": ["ICP116", "MAB116"] },
+    { "codigo": "ICP211", "nome": "Introd. a Modelagem de Sistemas", "periodo": 3, "aceitos": ["ICP211", "ICP237"] },
+    { "codigo": "ICP212", "nome": "Introdução à Computação Numérica", "periodo": 3, "aceitos": ["ICP212", "ICP238", "MAB230"] },
+    { "codigo": "ICP213", "nome": "Programação Orientada a Objetos", "periodo": 3, "aceitos": ["ICP213", "ICP239", "ICP240", "MAB240"] },
+    { "codigo": "MAE992", "nome": "Cálculo Integral e Diferencial II", "periodo": 3, "aceitos": ["MAE992", "MAC128"] },
+    { "codigo": "ICP246", "nome": "Arquitetura de Computadores e SO", "periodo": 4, "aceitos": ["ICP246", "MAB355", "MAB366"] },
+    { "codigo": "ICP248", "nome": "Computação Científica e Análise de Dados", "periodo": 4, "aceitos": ["ICP230", "ICP248", "MAB230"] },
+    { "codigo": "ICP249", "nome": "Tecnologia e Sociedade", "periodo": 4, "aceitos": ["ICP249", "ICP354", "MAB354"] },
+    { "codigo": "ICP489", "nome": "Banco de Dados I", "periodo": 4, "aceitos": ["ICP489", "MAB489"] },
+    { "codigo": "MAD243", "nome": "Estatística e Probabilidade", "periodo": 4, "aceitos": ["MAD243"] }
+  ]
+}

@@ -1394,3 +1394,406 @@ table .btn {
     flex-wrap: wrap;
   }
 }
+
+/* ============================================================
+   validador-estagio-ic — login, fila e mesa de revisão
+   ============================================================ */
+
+.login-card {
+  max-width: 420px;
+  margin: var(--spacing-xl) auto;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+
+.login-form label,
+.excecao-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.login-form input,
+.excecao-form input,
+.excecao-form select,
+.excecao-form textarea,
+.mesa-col textarea {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.login-erro {
+  color: var(--status-reprovado);
+  font-size: 0.9rem;
+}
+
+.user-badge {
+  font-size: 0.85rem;
+  color: var(--text-muted, #64748b);
+  margin-right: var(--spacing-xs);
+}
+
+.btn-sm {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: 0.85rem;
+}
+
+.submit-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  align-items: flex-start;
+}
+
+/* Fila da comissão */
+.fila-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.fila-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.fila-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.fila-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fila-badges {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+/* Mesa de revisão (split-screen) */
+.mesa {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--spacing-md);
+  align-items: start;
+}
+
+.mesa-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-width: 0;
+}
+
+.mesa-pdf {
+  width: 100%;
+  height: 80vh;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: #525659;
+}
+
+.mesa-hash {
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
+.mesa-tabela {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.mesa-excecao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--divider-color);
+}
+
+.radio-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+/* Exceções do discente */
+.excecao-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--spacing-sm) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.excecao-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.excecao-form {
+  margin-top: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.estagio-criterios li .btn {
+  margin-left: auto;
+}
+
+@media (max-width: 900px) {
+  .mesa {
+    grid-template-columns: 1fr;
+  }
+
+  .mesa-pdf {
+    height: 60vh;
+  }
+}
+
+.login-dev {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--divider-color);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.login-dev-hint {
+  font-size: 0.8rem;
+}
+
+.login-dev-hint code {
+  padding: 1px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.8rem;
+}
+
+/* ============================================================
+   Painel da comissão: segmented control, métricas e auditoria
+   ============================================================ */
+
+/* Barra segmentada — pills com contraste em ambos os temas */
+.app-nav.segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background-color: var(--bg-secondary);
+  width: fit-content;
+  margin-bottom: var(--spacing-md);
+}
+
+.app-nav.segmented .tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted, #64748b);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color .15s, color .15s, border-color .15s;
+}
+
+.app-nav.segmented .tab-btn:hover {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.app-nav.segmented .tab-btn.active {
+  background-color: var(--cor-ic1, #344563);
+  color: #ffffff;
+  border-color: var(--cor-ic1, #344563);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+}
+
+[data-theme="dark"] .app-nav.segmented .tab-btn.active {
+  background-color: var(--cor-ic1-light, #5b7bb4);
+  border-color: var(--cor-ic1-light, #5b7bb4);
+  color: #0f172a;
+}
+
+/* Badge de contagem de pendências dentro do pill */
+.seg-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background-color: var(--status-reprovado, #dc2626);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.app-nav.segmented .tab-btn.active .seg-badge {
+  background-color: #ffffff;
+  color: var(--cor-ic1, #344563);
+}
+
+/* Grid de métricas */
+.metricas-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin-bottom: var(--spacing-md);
+}
+
+.metric-det {
+  font-size: 0.78rem;
+}
+
+.metric-card.metric-alerta {
+  border-color: var(--status-reprovado, #dc2626);
+  box-shadow: 0 0 0 1px var(--status-reprovado, #dc2626);
+}
+
+.metric-card.metric-alerta .metric-value {
+  color: var(--status-reprovado, #dc2626);
+}
+
+/* Auditoria */
+.audit-card {
+  margin-top: var(--spacing-md);
+}
+
+.audit-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--spacing-sm) 0 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.audit-item {
+  display: grid;
+  grid-template-columns: 150px minmax(120px, 1fr) minmax(140px, 1fr) minmax(100px, auto);
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) 0;
+  border-bottom: 1px solid var(--divider-color);
+  font-size: 0.85rem;
+  align-items: baseline;
+}
+
+.audit-item:last-child {
+  border-bottom: none;
+}
+
+.audit-ts {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted, #64748b);
+}
+
+.audit-ator {
+  font-weight: 600;
+}
+
+.audit-acao {
+  font-weight: 600;
+  color: var(--cor-ic1, #344563);
+}
+
+[data-theme="dark"] .audit-acao {
+  color: var(--cor-ic1-light, #8fb0e8);
+}
+
+@media (max-width: 720px) {
+  .audit-item {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .app-nav.segmented {
+    width: 100%;
+  }
+
+  .app-nav.segmented .tab-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* Cards de métricas interativos */
+.metric-card.metric-clicavel {
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+
+.metric-card.metric-clicavel:hover,
+.metric-card.metric-clicavel:focus-visible {
+  border-color: var(--cor-ic1, #344563);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+[data-theme="dark"] .metric-card.metric-clicavel:hover,
+[data-theme="dark"] .metric-card.metric-clicavel:focus-visible {
+  border-color: var(--cor-ic1-light, #8fb0e8);
+}
+
+/* Chips de atalho para as filas dentro do card "Pendentes" */
+.seg-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--cor-ic1, #344563);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color .15s, color .15s;
+}
+
+.seg-chip:hover {
+  background: var(--cor-ic1, #344563);
+  color: #ffffff;
+}
+
+[data-theme="dark"] .seg-chip {
+  color: var(--cor-ic1-light, #8fb0e8);
+}
+
+[data-theme="dark"] .seg-chip:hover {
+  background: var(--cor-ic1-light, #8fb0e8);
+  color: #0f172a;
+}

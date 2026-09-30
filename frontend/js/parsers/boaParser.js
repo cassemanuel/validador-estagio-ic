@@ -110,12 +110,12 @@ function isCabecalhoOuLabel(str) {
  * @param {ArrayBuffer | Uint8Array} pdfData
  * @returns {Promise<Array<Array<{str: string, x: number, y: number}>>>}
  */
-export async function extractBOAItems(pdfData) {
-  if (!window.pdfjsLib) {
+export async function extractBOAItems(pdfData, pdfjsLib = globalThis.pdfjsLib) {
+  if (!pdfjsLib) {
     throw new Error('pdf.js não está disponível.');
   }
 
-  const pdf = await window.pdfjsLib.getDocument({
+  const pdf = await pdfjsLib.getDocument({
     data: pdfData,
     isEvalSupported: false, // Desativa avaliação de código dinâmico
     useSystemFonts: true,
@@ -171,12 +171,12 @@ function agruparPorColuna(items) {
 }
 
 /**
- * Extrai disciplinas pendentes dos itens de uma página.
+ * Extrai disciplinas pendentes e já aprovadas dos itens de uma página.
  * @param {Array<{str: string, x: number, y: number}>} items
  * @param {{credRecomY: number, perY: number}} faixas Valores de referência das linhas.
- * @returns {{obrigatorias: Array<object>, optativas: Array<object>, credRecomY: number, perY: number}}
+ * @returns {{obrigatorias: Array<object>, optativas: Array<object>, aprovadas: Array<object>, credRecomY: number, perY: number}}
  */
-function parsePaginaBOA(items, faixas) {
+export function parsePaginaBOA(items, faixas) {
   let { credRecomY, perY } = faixas;
 
   // Localiza os rótulos das linhas para calibrar as faixas de Y desta página.
@@ -192,13 +192,78 @@ function parsePaginaBOA(items, faixas) {
   // atividades já aprovadas (ou ao cabeçalho de ocorrências).
   const approvalMinY = credRecomY + LAYOUT_CONFIG.ZONA_APROVADAS_OFFSET_Y;
 
+  // Rótulos da zona de aprovadas (Grau/C.H./Cred acima do elenco recomendado)
+  // permitem associar cada decimal à linha correta dentro da coluna.
+  const labelY = (txt) =>
+    items
+      .filter((it) => it.str === txt && it.y > approvalMinY)
+      .map((it) => it.y);
+  const grauYs = labelY('Grau');
+  const credAprYs = labelY('Cred');
+  const chAprYs = labelY('C.H.');
+
   const obrigatorias = [];
   const optativas = [];
+  const aprovadas = [];
   const vistos = new Set();
+  const vistosAprovadas = new Set();
 
   for (const coluna of agruparPorColuna(items)) {
     try {
       const ordenados = [...coluna].sort((a, b) => a.y - b.y);
+
+      // Atividades já aprovadas: códigos na zona superior da coluna (acima
+      // do elenco recomendado). O BOA discrimina por coluna o código, grau,
+      // C.H., Cred e nome de cada disciplina cumprida — sem isso o ciclo
+      // básico não marca nada como concluído quando o documento é o BOA.
+      const zona = ordenados.filter(
+        (it) => it.y > approvalMinY && !detectarStatus(it.str)
+      );
+      for (const codItem of zona.filter((it) => isCodigoUFRJ(it.str))) {
+        const codAprov = codItem.str.trim();
+        if (vistosAprovadas.has(codAprov)) continue;
+        vistosAprovadas.add(codAprov);
+
+        const proximo = (alvoY, pred) =>
+          zona
+            .filter((it) => it !== codItem && pred(it))
+            .sort((a, b) => Math.abs(a.y - alvoY) - Math.abs(b.y - alvoY))[0];
+
+        // Decimal na linha rotulada (Grau/Cred/C.H.); fallback para o
+        // decimal mais próximo do código quando o rótulo não veio na página.
+        const decLinha = (labelYs) => {
+          for (const y of labelYs) {
+            const hit = zona.find(
+              (it) =>
+                DECIMAL_REGEX.test(it.str) &&
+                Math.abs(it.y - y) <= TOLERANCIA_LINHA
+            );
+            if (hit) return parseFloat(hit.str);
+          }
+          const prox = proximo(codItem.y, (it) => DECIMAL_REGEX.test(it.str));
+          return prox ? parseFloat(prox.str) : null;
+        };
+
+        const letra = proximo(codItem.y, (it) =>
+          LETRAS_APROVACAO.has(it.str.toUpperCase())
+        );
+        const nomeItem = proximo(
+          codItem.y,
+          (it) => !isCabecalhoOuLabel(it.str)
+        );
+        const grau = decLinha(grauYs);
+        const crR = decLinha(credAprYs) ?? LAYOUT_CONFIG.CREDITOS_PADRAO;
+
+        aprovadas.push({
+          codigo: codAprov,
+          nome: nomeItem?.str || codAprov,
+          situacao: letra ? letra.str.toUpperCase() : 'AP',
+          grau,
+          crR,
+          ch: decLinha(chAprYs),
+          pontos: grau != null ? grau * crR : null,
+        });
+      }
 
       // Código recomendado: item-código na linha mais baixa da coluna.
       const codigos = ordenados.filter((it) => isCodigoUFRJ(it.str));
@@ -254,19 +319,21 @@ function parsePaginaBOA(items, faixas) {
     }
   }
 
-  return { obrigatorias, optativas, credRecomY, perY };
+  return { obrigatorias, optativas, aprovadas, credRecomY, perY };
 }
 
 /**
- * Processa um arquivo BOA e retorna as disciplinas pendentes.
+ * Processa um arquivo BOA e retorna pendências e disciplinas aprovadas.
  * @param {ArrayBuffer | Uint8Array} pdfData
- * @returns {Promise<{obrigatorias: Array<object>, optativas: Array<object>}>}
+ * @returns {Promise<{obrigatorias: Array<object>, optativas: Array<object>, aprovadas: Array<object>}>}
  */
-export async function processarBOA(pdfData) {
-  const paginas = await extractBOAItems(pdfData);
+export async function processarBOA(pdfData, pdfjsLib) {
+  const paginas = await extractBOAItems(pdfData, pdfjsLib);
   const obrigatorias = [];
   const optativas = [];
+  const aprovadas = [];
   const vistos = new Set();
+  const vistosAprovadas = new Set();
 
   // As faixas de Y são calibradas pelos rótulos de cada página e carregadas
   // para a página seguinte (a continuação da tabela repete o mesmo layout).
@@ -295,7 +362,13 @@ export async function processarBOA(pdfData) {
         optativas.push(d);
       }
     }
+    for (const d of resultado.aprovadas || []) {
+      if (!vistosAprovadas.has(d.codigo)) {
+        vistosAprovadas.add(d.codigo);
+        aprovadas.push(d);
+      }
+    }
   }
 
-  return { obrigatorias, optativas };
+  return { obrigatorias, optativas, aprovadas };
 }

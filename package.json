@@ -1,4 +1,8 @@
 {
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/js/**/*.test.js\""
+  },
   "dependencies": {
     "pdfjs-dist": "^3.11.174"
   }

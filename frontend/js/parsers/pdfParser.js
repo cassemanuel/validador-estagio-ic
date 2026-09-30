@@ -7,7 +7,7 @@
  * - NCG, NCC, T e Cursando não conferem grau.
  */
 
-import { disciplinaConferGrau } from './calculator.js';
+import { disciplinaConferGrau } from '../domain/cr.js';
 
 const HEADER_REGEX = /CH\s+SFGrau\s+CrO\s+PontosPer[íi]odo\s+C[óo]digo\s+Nome\s+da\s+Disciplina\/RCC\s+CrR/i;
 const PERIODO_INICIO_REGEX = /^(\d{4}\s*\/\s*\d|\d{4})\b/;
@@ -33,12 +33,12 @@ const LAYOUT_CONFIG = {
  * @param {(progress: number) => void} [onProgress]
  * @returns {Promise<string[]>}
  */
-export async function extractTextFromPDF(pdfData, onProgress) {
-  if (!window.pdfjsLib) {
+export async function extractTextFromPDF(pdfData, onProgress, pdfjsLib = globalThis.pdfjsLib) {
+  if (!pdfjsLib) {
     throw new Error('pdf.js não está disponível.');
   }
 
-  const pdf = await window.pdfjsLib.getDocument({
+  const pdf = await pdfjsLib.getDocument({
     data: pdfData,
     isEvalSupported: false, // Desativa avaliação de código dinâmico
     useSystemFonts: true,
@@ -483,7 +483,7 @@ export function parseHistorico(lines) {
  * @param {(progress: number) => void} [onProgress]
  * @returns {Promise<object>}
  */
-export async function processarPDF(pdfData, onProgress) {
-  const lines = await extractTextFromPDF(pdfData, onProgress);
+export async function processarPDF(pdfData, onProgress, pdfjsLib) {
+  const lines = await extractTextFromPDF(pdfData, onProgress, pdfjsLib);
   return parseHistorico(lines);
 }
