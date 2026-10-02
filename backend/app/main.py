@@ -44,9 +44,15 @@ def health():
 if _FRONTEND_DIR.exists():
     INDEX_PATH = _FRONTEND_DIR / "index.html"
 
+    _FRONTEND_ROOT = _FRONTEND_DIR.resolve()
+
     @app.get("/{path:path}")
     async def spa_fallback(request: Request, path: str):
-        candidate = _FRONTEND_DIR / path
+        # Confinamento: resolve o caminho canônico (expande "..", "%2e%2e",
+        # symlinks) e só serve arquivos dentro do diretório do frontend.
+        candidate = (_FRONTEND_DIR / path).resolve()
+        if not candidate.is_relative_to(_FRONTEND_ROOT):
+            return Response(status_code=404)
         if candidate.is_file():
             return FileResponse(candidate)
         if path.startswith(("css/", "js/", "vendor/", "fonts/")):

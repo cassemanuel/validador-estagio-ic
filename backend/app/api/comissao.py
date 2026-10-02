@@ -132,9 +132,11 @@ def fila(
 
 @router.get("/metricas")
 def metricas(
-    db: Session = Depends(get_db), _=Depends(require_comissao)
+    ano: int | None = Query(None, ge=2000, le=2100),
+    db: Session = Depends(get_db),
+    _=Depends(require_comissao),
 ):
-    return calcular_metricas(db, settings)
+    return calcular_metricas(db, settings, ano)
 
 
 @router.get("/auditoria")
@@ -168,7 +170,9 @@ def auditoria(
 
 @router.get("/autorizacoes")
 def autorizacoes(
-    db: Session = Depends(get_db), _=Depends(require_comissao)
+    ano: int | None = Query(None, ge=2000, le=2100),
+    db: Session = Depends(get_db),
+    _=Depends(require_comissao),
 ):
     """Liberações deferidas com validade (liberação + N dias)."""
     subs = (
@@ -177,6 +181,14 @@ def autorizacoes(
         .order_by(Submissao.concluido_em.desc())
         .all()
     )
+    anos = sorted(
+        {s.concluido_em.year for s in subs if s.concluido_em}, reverse=True
+    )
+    if ano is not None:
+        subs = [
+            s for s in subs
+            if s.concluido_em and s.concluido_em.year == ano
+        ]
     linhas = []
     for s in subs:
         aut = dados_autorizacao(s, settings.autorizacao_validade_dias)
@@ -194,7 +206,7 @@ def autorizacoes(
                 "status": "expirada" if aut["expirada"] else "vigente",
             }
         )
-    return {"autorizacoes": linhas}
+    return {"autorizacoes": linhas, "anos": anos}
 
 
 @router.get("/submissoes/{sub_id}")

@@ -26,9 +26,18 @@ def semestre_letivo(dt: datetime | None = None) -> dict:
     return {"rotulo": f"{ano}/{sem}", "inicio": inicio, "fim": fim}
 
 
-def calcular_metricas(db: Session, settings) -> dict:
+def calcular_metricas(db: Session, settings, ano: int | None = None) -> dict:
     sem = semestre_letivo()
-    subs = db.query(Submissao).all()
+    todas = db.query(Submissao).all()
+    anos = sorted(
+        {_aware(s.criado_em).year for s in todas if s.criado_em},
+        reverse=True,
+    )
+    subs = (
+        todas
+        if ano is None
+        else [s for s in todas if s.criado_em and _aware(s.criado_em).year == ano]
+    )
 
     por_status = {}
     for status in ("fila_regular", "mesa_revisao", "aprovada",
@@ -56,6 +65,8 @@ def calcular_metricas(db: Session, settings) -> dict:
     pendentes = por_status["fila_regular"] + por_status["mesa_revisao"]
 
     return {
+        "anos": anos,
+        "ano": ano,
         "semestre": sem["rotulo"],
         "fim_periodo": sem["fim"].date().isoformat(),
         "dias_para_fim_periodo": max(dias_para_fim, 0),

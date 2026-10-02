@@ -200,21 +200,22 @@ function initNavegacaoSPA() {
 }
 
 async function aplicarRota(caminho) {
-  if (ROTAS_PUBLICAS.includes(caminho)) {
+  const pathname = String(caminho).split('?')[0];
+  if (ROTAS_PUBLICAS.includes(pathname)) {
     mostrarLogin();
     return;
   }
   try {
     const user = await api('/api/auth/me');
-    if (caminho === '/aluno' || caminho === '/portal') {
+    if (pathname === '/aluno' || pathname === '/portal') {
       mostrarView('view-discente');
       await initPortal();
       return;
     }
-    if (caminho.startsWith('/admin') && user.papel === 'comissao') {
-      const view = caminho === '/admin/fila' ? 'view-admin-fila'
-        : caminho === '/admin/mesa' ? 'view-admin-mesa'
-        : caminho === '/admin/autorizacoes' ? 'view-admin-autorizacoes'
+    if (pathname.startsWith('/admin') && user.papel === 'comissao') {
+      const view = pathname === '/admin/fila' ? 'view-admin-fila'
+        : pathname === '/admin/mesa' ? 'view-admin-mesa'
+        : pathname === '/admin/autorizacoes' ? 'view-admin-autorizacoes'
         : 'view-admin-dashboard';
       mostrarView(view);
       await initPainel(view);

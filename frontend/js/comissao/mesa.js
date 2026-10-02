@@ -21,9 +21,8 @@ const TIPO_EXCECAO = {
   dispensa: 'Dispensa',
 };
 
-export async function abrirMesa(subId, onNavegar) {
+export async function abrirMesa(subId, docInicial = 'boletim') {
   const mesa = document.getElementById('admin-mesa');
-  const container = document.getElementById('view-admin-mesa');
   clearElement(mesa);
 
   let sub;
@@ -32,7 +31,6 @@ export async function abrirMesa(subId, onNavegar) {
   } catch (err) {
     mesa.appendChild(el('div', { className: 'card' },
       el('p', { className: 'text-muted' }, err.message)));
-    if (onNavegar) onNavegar();
     return;
   }
 
@@ -48,24 +46,22 @@ export async function abrirMesa(subId, onNavegar) {
     voltar,
   ]);
 
-  const { tabelaDisciplinas, evolucaoCR } = renderLadoDados(sub);
+  const { col, tabelaDisciplinas, evolucaoCR } = renderLadoDados(sub);
 
   mesa.appendChild(header);
   mesa.appendChild(el('div', { className: 'mesa' }, [
     el('div', { className: 'mesa-col' }, [
-      renderLadoPdf(sub),
+      renderLadoPdf(sub, docInicial),
       tabelaDisciplinas,
     ]),
-    renderLadoDados(sub).col,
+    col,
   ]));
   mesa.appendChild(el('div', { className: 'mesa-rodape' }, evolucaoCR));
-
-  if (onNavegar) onNavegar();
 }
 
-function renderLadoPdf(sub) {
+function renderLadoPdf(sub, docInicial = 'boletim') {
   const docs = sub.documentos || {};
-  const [abaAtiva, setAbaAtiva] = useState('boletim');
+  const [abaAtiva, setAbaAtiva] = useState(docInicial === 'boa' ? 'boa' : 'boletim');
 
   const tabs = el('div', { className: 'app-nav segmented' });
   const conteudo = el('div', { className: 'mesa-pdf-wrap' });
@@ -123,10 +119,10 @@ function renderLadoPdf(sub) {
   }
 
   const btnFecharFloat = el('button', {
-    className: 'btn btn-icon btn-fechar-pdf-fullscreen hidden',
+    className: 'btn-fechar-pdf-fullscreen hidden',
     type: 'button',
-    'aria-label': 'Restaurar visualizador',
-  }, '✕');
+    'aria-label': 'Fechar visualizador',
+  }, '✕ Fechar Visualizador');
 
   const atualizarEstadoFullscreen = (expandir) => {
     wrap.classList.toggle('mesa-pdf-fullscreen', expandir);

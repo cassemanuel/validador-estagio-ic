@@ -464,6 +464,15 @@ export function parsePaginaBOA(items, faixas) {
  * @param {Array<Array<{str:string, x:number, y:number}>>} paginas
  * @returns {{grupos: Array<{nome: string, exigido: number, cumprido: number, faltante: number}>, creditosFaltantes: number}}
  */
+// Créditos exigidos por grupo de eletivas/optativas (PPC 2022 — BCC).
+// Os totais são fixos: o quadro de Resumo do BOA também lista C.H./horas
+// (ex.: 320h de Extensão), que não devem ser confundidas com créditos.
+const CREDITOS_EXIGIDOS = {
+  'escolha condicionada': 32,
+  'livre escolha': 8,
+  'escolha restrita': 4,
+};
+
 export function extrairResumoBOA(paginas) {
   const nomes = [
     ['escolha condicionada', /escolha\s*condicionada/i],
@@ -471,50 +480,38 @@ export function extrairResumoBOA(paginas) {
     ['escolha restrita', /escolha\s*restrita|humanidades/i],
   ];
 
-  const decRegex = /^\d+(?:\.\d+)?$/;
   const grupos = [];
   let creditosFaltantes = 0;
 
   for (const items of paginas) {
-    // Agrupa itens em colunas por X
-    const cols = [];
-    for (const it of items) {
-      let col = cols.find((c) => Math.abs(c.x - it.x) <= 8);
-      if (!col) {
-        col = { x: it.x, itens: [] };
-        cols.push(col);
-      }
-      col.itens.push(it);
-    }
-    cols.sort((a, b) => a.x - b.x);
-
     for (const [nomePadrao, regex] of nomes) {
       if (grupos.find((g) => g.nome === nomePadrao)) continue;
 
+      const exigido = CREDITOS_EXIGIDOS[nomePadrao];
       const labelItem = items.find((it) => regex.test(normalize(it.str)));
       if (!labelItem) continue;
 
-      // Busca a coluna mais próxima à direita do rótulo que tenha
-      // pelo menos 3 números (ex.: exigido, cumprido, faltante).
-      const proximas = cols
-        .filter((c) => c.x > labelItem.x - 5)
-        .sort((a, b) => Math.abs(a.x - (labelItem.x + 80)) - Math.abs(b.x - (labelItem.x + 80)));
+      // Lê apenas números na MESMA linha do rótulo (mesmo Y) e à direita dele,
+      // descartando valores acima do teto de créditos do grupo (horas de
+      // extensão como "320" não são créditos). A coluna "Falta Cumprir" é a
+      // mais à direita da tabela de resumo.
+      const candidatos = items
+        .filter(
+          (it) =>
+            it.x > labelItem.x &&
+            Math.abs(it.y - labelItem.y) <= TOLERANCIA_LINHA
+        )
+        .sort((a, b) => a.x - b.x)
+        .map((it) => parseFloat(it.str))
+        .filter((n) => !Number.isNaN(n) && n >= 0 && n <= exigido);
 
-      for (const col of proximas) {
-        const numeros = col.itens
-          .map((it) => parseFloat(it.str))
-          .filter((n) => !Number.isNaN(n) && n >= 0);
-        if (numeros.length < 2) continue;
+      const faltante = candidatos.length
+        ? candidatos[candidatos.length - 1]
+        : exigido;
+      const cumprido = Math.max(0, exigido - faltante);
 
-        const exigido = numeros.find((n) => [32, 8, 4, 16, 44, 40].includes(Math.round(n * 10) / 10))
-          ?? numeros[numeros.length - 1];
-        const faltante = Math.max(0, ...numeros.filter((n) => n <= exigido && n !== exigido));
-        const cumprido = Math.max(0, exigido - faltante);
-
-        grupos.push({ nome: nomePadrao, exigido, cumprido, faltante });
-        creditosFaltantes += faltante;
-        break;
-      }
+      grupos.push({ nome: nomePadrao, exigido, cumprido, faltante });
+      creditosFaltantes += faltante;
     }
   }
 

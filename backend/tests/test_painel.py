@@ -118,6 +118,36 @@ def test_arquivamento_preserva_cadeia(client, tmp_path):
         assert verificar_cadeia(db)
 
 
+def test_filtro_por_ano_metricas_e_autorizacoes(client):
+    """O parâmetro ?ano= restringe métricas e autorizações ao ano do processo."""
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+
+    login(client, "comissao1", "comissao123")
+    client.post(
+        f"/api/comissao/submissoes/{sub['id']}/decisao",
+        json={"decisao": "aprovada"},
+    )
+
+    ano_atual = datetime.now(timezone.utc).year
+    m = client.get(f"/api/comissao/metricas?ano={ano_atual}").json()
+    assert m["total"] == 1
+    assert ano_atual in m["anos"]
+
+    m_vazio = client.get(f"/api/comissao/metricas?ano={ano_atual - 5}").json()
+    assert m_vazio["total"] == 0
+    assert ano_atual in m_vazio["anos"]  # seletor segue completo
+
+    auts = client.get(f"/api/comissao/autorizacoes?ano={ano_atual}").json()
+    assert len(auts["autorizacoes"]) == 1
+    assert ano_atual in auts["anos"]
+
+    auts_vazio = client.get(
+        f"/api/comissao/autorizacoes?ano={ano_atual - 5}"
+    ).json()
+    assert auts_vazio["autorizacoes"] == []
+
+
 def test_autorizacoes_validade_90_dias(client):
     """Deferimento gera autorização com validade = liberação + 90 dias."""
     from datetime import datetime

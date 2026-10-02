@@ -943,8 +943,18 @@ function getOptativasCursadas(pendencias) {
   return resultado;
 }
 
+const STATUS_PENDENCIA = {
+  inscricao_vedada: 'Inscrição Vedada',
+  inscricao_facultada: 'Inscrição Facultada',
+  a_cursar: 'A Cursar',
+  cursando: 'Cursando',
+};
+
 function renderPendencias(pendencias) {
-  const itemObr = (d) => el('li', {}, `${d.codigo || d.nome} — ${d.status || 'pendente'}`);
+  const formatarStatus = (status) =>
+    STATUS_PENDENCIA[status] || (status ? String(status).replace(/_/g, ' ') : 'Pendente');
+  const itemObr = (d) =>
+    el('li', {}, `${d.codigo || d.nome} — ${formatarStatus(d.status)}`);
 
   // Optativas: cálculo por saldo de créditos extraído do Resumo do BOA.
   const resumo = state.boa?.dados?.resumo;
@@ -957,7 +967,7 @@ function renderPendencias(pendencias) {
   const renderOptativas = () => {
     if (faltantesCred == null || faltantesCred <= 0) {
       return el('div', { className: 'slot-preenchido' },
-        `Eletivas e Optativas Concluídas (${totalCredCumpridos || totalCredExigidos}/${totalCredExigidos} créditos)`);
+        `Eletivas e Optativas Concluídas (${totalCredExigidos}/${totalCredExigidos} créditos)`);
     }
     const eletivas4 = Math.floor(faltantesCred / 4);
     const resto = faltantesCred % 4;

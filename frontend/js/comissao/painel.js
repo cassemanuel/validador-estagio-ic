@@ -14,6 +14,8 @@ import { abrirMesa } from './mesa.js';
 
 let filaParams = { tipo: 'todos', status: 'todos', q: '', offset: 0, limite: 25 };
 let filaCarregando = false;
+let dashboardAno = '';
+let autorizacoesAno = '';
 
 const ACAO_LABEL = {
   login: 'Login',
@@ -32,7 +34,39 @@ const fmtData = (iso) =>
 export function initPainel(viewAtual = 'view-admin-dashboard') {
   initFilaTabs();
   initBuscaFila();
+  initFiltrosAno();
   carregarPainel(viewAtual);
+}
+
+function initFiltrosAno() {
+  const dash = document.getElementById('dashboard-ano');
+  if (dash && !dash.dataset.bound) {
+    dash.dataset.bound = '1';
+    dash.addEventListener('change', () => {
+      dashboardAno = dash.value;
+      carregarMetricas();
+    });
+  }
+  const aut = document.getElementById('autorizacoes-ano');
+  if (aut && !aut.dataset.bound) {
+    aut.dataset.bound = '1';
+    aut.addEventListener('change', () => {
+      autorizacoesAno = aut.value;
+      carregarAutorizacoes();
+    });
+  }
+}
+
+function preencherAnos(selectEl, anos, selecionado) {
+  if (!selectEl) return;
+  const lista = anos || [];
+  clearElement(selectEl);
+  selectEl.appendChild(el('option', { value: '' }, 'Todos os anos'));
+  lista.forEach((a) =>
+    selectEl.appendChild(el('option', { value: String(a) }, String(a))));
+  selectEl.value = selecionado && lista.includes(Number(selecionado))
+    ? selecionado
+    : '';
 }
 
 export async function carregarPainel(viewAtual) {
@@ -42,7 +76,11 @@ export async function carregarPainel(viewAtual) {
   if (viewAtual === 'view-admin-fila') await carregarFila();
   if (viewAtual === 'view-admin-mesa') {
     const mesa = document.getElementById('admin-mesa');
-    if (!mesa.firstChild) {
+    const params = new URLSearchParams(window.location.search);
+    const subId = Number(params.get('id'));
+    if (subId) {
+      await abrirMesa(subId, params.get('doc') || 'boletim');
+    } else if (!mesa.firstChild) {
       clearElement(mesa);
       mesa.appendChild(el('div', { className: 'card' }, [
         el('p', { className: 'text-muted' }, 'Selecione um processo na Fila para abrir a mesa de análise.'),
@@ -62,10 +100,11 @@ async function carregarMetricas() {
 
   let m;
   try {
-    m = await api('/api/comissao/metricas');
+    m = await api(`/api/comissao/metricas${dashboardAno ? `?ano=${dashboardAno}` : ''}`);
   } catch {
     return;
   }
+  preencherAnos(document.getElementById('dashboard-ano'), m.anos, dashboardAno);
 
   const chipFila = (tipo, label, count) => {
     const chip = el('button', {
@@ -320,20 +359,18 @@ function renderLinha(sub) {
     className: 'btn btn-secondary btn-sm', type: 'button',
   }, 'Revisar');
   btnRevisar.addEventListener('click', () => {
-    abrirMesa(sub.id, () => navegarPara('/admin/mesa'));
+    navegarPara(`/admin/mesa?id=${sub.id}`);
   });
   acoes.appendChild(btnRevisar);
 
   const linkDoc = (tipo, label) => {
-    const url = `/api/comissao/submissoes/${sub.id}/${tipo}`;
-    const a = el('a', {
-      href: url,
-      target: '_blank',
-      rel: 'noopener noreferrer',
-      className: 'doc-link',
+    const btn = el('button', {
+      className: 'btn btn-secondary btn-sm doc-link',
+      type: 'button',
     }, label);
-    a.setAttribute('data-spa', 'false');
-    return a;
+    btn.addEventListener('click', () =>
+      navegarPara(`/admin/mesa?id=${sub.id}&doc=${tipo}`));
+    return btn;
   };
 
   const statusLabel = {
@@ -408,12 +445,16 @@ async function carregarAutorizacoes() {
   const container = document.getElementById('admin-autorizacoes');
   clearElement(container);
 
-  let autorizacoes;
+  let resp;
   try {
-    ({ autorizacoes } = await api('/api/comissao/autorizacoes'));
+    resp = await api(`/api/comissao/autorizacoes${autorizacoesAno ? `?ano=${autorizacoesAno}` : ''}`);
   } catch {
     return;
   }
+  const { autorizacoes } = resp;
+  preencherAnos(
+    document.getElementById('autorizacoes-ano'), resp.anos, autorizacoesAno
+  );
 
   const corpo = autorizacoes.length
     ? autorizacoes.map((a) => {
