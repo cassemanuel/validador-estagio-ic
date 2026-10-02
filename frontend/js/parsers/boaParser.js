@@ -201,7 +201,7 @@ function agruparPorColuna(items) {
  * @returns {{nome: string|null, dre: string|null, curso: string|null}}
  */
 export function extrairMetadataBOA(items) {
-  const meta = { nome: null, dre: null, curso: null };
+  const meta = { nome: null, dre: null, curso: null, emissao: null };
   if (!items?.length) return meta;
 
   for (const it of items) {
@@ -221,6 +221,10 @@ export function extrairMetadataBOA(items) {
     if (!meta.curso) {
       const m = s.match(/(\d{4,5}\s*-\s*[A-Za-zÁ-ú\s]+)/);
       if (m) meta.curso = m[1].trim();
+    }
+    if (!meta.emissao) {
+      const m = s.match(/(\d{2}\/\d{2}\/\d{4})/);
+      if (m) meta.emissao = m[1];
     }
   }
 

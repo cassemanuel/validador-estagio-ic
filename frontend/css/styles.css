@@ -1993,6 +1993,41 @@ th {
   margin-bottom: var(--spacing-xl);
 }
 
+/* Slots de eletivas/optativas (BOA) */
+.slots-eletivas {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.slots-eletivas li {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  font-size: 0.9rem;
+}
+
+.slot-preenchido {
+  background-color: var(--status-ap-bg);
+  color: var(--status-ap);
+}
+
+.slot-vago {
+  background-color: var(--bg-secondary);
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .slot-preenchido {
+  background-color: rgba(34, 197, 94, 0.15);
+}
+
+[data-theme="dark"] .slot-vago {
+  background-color: var(--bg-hover);
+}
+
 /* Botão de texto no rodapé */
 .btn-text {
   background: none;
@@ -2028,6 +2063,13 @@ th {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .modal-content {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
 }
 
 .modal-header {

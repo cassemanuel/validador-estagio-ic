@@ -112,6 +112,11 @@ function mostrarLogin() {
   mostrarView('view-login');
   document.getElementById('logout-btn').hidden = true;
   document.getElementById('user-badge').hidden = true;
+  const headerNav = document.getElementById('header-nav');
+  if (headerNav) {
+    headerNav.hidden = true;
+    headerNav.style.display = 'none';
+  }
   history.replaceState({ view: 'login' }, '', '/login');
 }
 
@@ -122,7 +127,11 @@ async function mostrarApp(user, pushState = true) {
   document.getElementById('logout-btn').hidden = false;
 
   const headerNav = document.getElementById('header-nav');
-  if (headerNav) headerNav.hidden = user.papel !== 'comissao';
+  if (headerNav) {
+    const visivel = user.papel === 'comissao';
+    headerNav.hidden = !visivel;
+    headerNav.style.display = visivel ? 'flex' : 'none';
+  }
 
   const homeLink = document.getElementById('header-home-link');
   if (homeLink) {

@@ -7,12 +7,24 @@ submissão para a Mesa de Revisão.
 """
 
 import re
+from datetime import datetime
 from typing import Any
 
 from ..rules.ppc2022 import verificar_elegibilidade
 
 CODIGO_UFRJ_REGEX = re.compile(r"^[A-Z]{3}\d{3}$|^[A-Z]{3}[A-Z0-9]\d{2}$")
 DRE_REGEX = re.compile(r"^\d{9,10}$")
+
+
+def _parse_data_emissao(valor: Any) -> datetime | None:
+    if not valor:
+        return None
+    for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(str(valor).strip(), fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def analisar(dados: dict[str, Any], regras: dict, username_autenticado: str) -> dict:
@@ -65,5 +77,15 @@ def analisar(dados: dict[str, Any], regras: dict, username_autenticado: str) -> 
             f"(declarado apto={declarado['apto']}, recalculado apto="
             f"{diagnostico_recalculado['apto']})."
         )
+
+    # Temporalidade cruzada entre Boletim e BOA.
+    data_boletim = _parse_data_emissao(metadata.get("emissao"))
+    data_boa = _parse_data_emissao(metadata.get("emissaoBoa"))
+    if data_boletim and data_boa:
+        diff = abs((data_boa - data_boletim).days)
+        if diff > 10:
+            alertas.append(
+                "Documentos com mais de 10 dias de diferença entre as datas de emissão."
+            )
 
     return {"alertas": alertas, "diagnostico_recalculado": diagnostico_recalculado}

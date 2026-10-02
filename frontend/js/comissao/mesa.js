@@ -11,7 +11,7 @@ import {
   clearElement,
   formatNumberBR,
 } from '../ui/dom.js';
-import { calcularCRAcumulado } from '../domain/cr.js';
+import { renderSvgCrEvolution } from '../discente/portal.js';
 import { carregarPainel } from './painel.js';
 import { navegarPara } from '../router.js';
 
@@ -176,22 +176,12 @@ function renderLadoDados(sub) {
 
 function renderEvolucaoCR(periodos) {
   const periodosValidos = (periodos || [])
-    .filter((p) => String(p.periodo).match(/^\d{4}\/\d$/));
-  const cards = periodosValidos.map((p) => {
-    const disciplinas = p.disciplinas || [];
-    const { crCalculado } = calcularCRAcumulado({ periodos: [p] });
-    return el('div', { className: 'metric-card' }, [
-      el('div', { className: 'metric-label' }, `Período ${p.periodo}`),
-      el('div', { className: 'metric-value' }, formatNumberBR(crCalculado, 3)),
-      el('div', { className: 'metric-sublabel' }, `${disciplinas.length} disciplinas`),
-    ]);
-  });
+    .filter((p) => String(p.periodo).match(/^\d{4}\/\d$/))
+    .sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)));
 
   return el('div', { className: 'card' }, [
     el('h4', {}, 'Evolução do CR por Período'),
-    cards.length
-      ? el('div', { className: 'metrics-grid mini' }, cards)
-      : el('p', { className: 'text-muted' }, 'Sem dados de evolução por período.'),
+    renderSvgCrEvolution(periodosValidos, 0),
   ]);
 }
 

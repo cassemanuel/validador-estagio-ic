@@ -30,6 +30,7 @@ const state = {
   regras: null,
   diagnostico: null,
   excecoes: [],
+  alertasCruzamento: [],
 };
 
 const STATUS_LABEL = {
@@ -185,6 +186,13 @@ function mergeAndDiagnose() {
   const historico = state.boletim.historico;
   const boa = state.boa.dados;
 
+  state.alertasCruzamento = validarCruzamentoDocumentos(
+    state.boletim.file?.name,
+    historico?.metadata,
+    state.boa.file?.name,
+    boa?.metadata
+  );
+
   // BOA: adiciona disciplinas já aprovadas/cumpridas por coluna e pendências.
   const concluidasBOA = [...(boa.aprovadas || []), ...(boa.cumpridos || [])];
   if (concluidasBOA.length) {
@@ -223,11 +231,55 @@ function getMergedDados() {
   const historico = state.boletim?.historico || { metadata: {}, periodos: [] };
   const boa = state.boa?.dados || { obrigatorias: [], optativas: [], metadata: {} };
   return {
-    metadata: historico.metadata,
+    metadata: {
+      ...historico.metadata,
+      emissaoBoa: boa.metadata?.emissao || null,
+    },
     periodos: historico.periodos,
     pendencias: { obrigatorias: boa.obrigatorias || [], optativas: boa.optativas || [] },
     resumo: historico.resumo,
   };
+}
+
+function normalizarNome(nome) {
+  return String(nome || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function parseDataBR(str) {
+  if (!str) return null;
+  const m = String(str).match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!m) return null;
+  return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+}
+
+function validarCruzamentoDocumentos(nomeBoletim, metaBoletim, nomeBoa, metaBoa) {
+  const alertas = [];
+  const nomeB = normalizarNome(metaBoletim?.nome);
+  const nomeO = normalizarNome(metaBoa?.nome);
+  const dreB = String(metaBoletim?.dre || '').trim();
+  const dreO = String(metaBoa?.dre || '').trim();
+
+  if (nomeB && nomeO && nomeB !== nomeO) {
+    alertas.push('Os documentos anexados pertencem a discentes diferentes ou não puderam ser validados.');
+  }
+  if (dreB && dreO && dreB !== dreO) {
+    alertas.push('Os documentos anexados pertencem a discentes diferentes ou não puderam ser validados.');
+  }
+
+  const dataB = parseDataBR(metaBoletim?.emissao);
+  const dataO = parseDataBR(metaBoa?.emissao);
+  if (dataB && dataO) {
+    const diff = Math.abs(dataO - dataB) / (1000 * 60 * 60 * 24);
+    if (diff > 10) {
+      alertas.push(`Documentos com mais de 10 dias de diferença entre as datas de emissão (${Math.round(diff)} dias).`);
+    }
+  }
+
+  return alertas;
 }
 
 function renderRevisao(container) {
@@ -251,6 +303,21 @@ function renderRevisao(container) {
     ])
   );
 
+  if (state.alertasCruzamento?.length) {
+    container.appendChild(
+      el('div', { className: 'card card-aviso' }, [
+        el('h4', {}, 'Atenção: validação cruzada dos documentos'),
+        el('ul', { className: 'estagio-criterios' },
+          state.alertasCruzamento.map((a) =>
+            el('li', { className: 'criterio-falta' }, [
+              el('i', { className: 'bi bi-exclamation-circle', 'aria-hidden': 'true' }),
+              el('span', {}, ` ${a}`),
+            ])
+          )),
+      ])
+    );
+  }
+
   container.appendChild(renderCicloBasico());
   container.appendChild(renderDisciplinas(periodos));
   if (pendencias?.obrigatorias?.length || pendencias?.optativas?.length) {
@@ -271,11 +338,13 @@ function renderRevisao(container) {
 function updateConfirmButton() {
   const btn = document.getElementById('btn-confirmar-submissao');
   if (!btn) return;
-  const habilitado = !!(state.boletim?.file && state.boa?.file);
+  const temAlertaBloqueante = (state.alertasCruzamento || []).some((a) =>
+    a.includes('pertencem a discentes diferentes'));
+  const habilitado = !!(state.boletim?.file && state.boa?.file && !temAlertaBloqueante);
   btn.disabled = !habilitado;
   btn.title = habilitado
     ? 'Enviar Boletim + BOA à Comissão'
-    : 'Anexe ambos os documentos para prosseguir';
+    : 'Anexe ambos os documentos e resolva os alertas para prosseguir';
 }
 
 async function submitDocuments(btn, erro) {
@@ -319,28 +388,149 @@ function renderAnalise(container) {
 
   const periodosComCR = dados.periodos
     .filter((p) => String(p.periodo).match(/^\d{4}\/\d$/))
+    .sort((a, b) => String(a.periodo).localeCompare(String(b.periodo)))
     .map((p) => {
       const disciplinas = p.disciplinas || [];
       const { crCalculado } = calcularCRAcumulado({ periodos: [p] });
       return { periodo: p.periodo, cr: crCalculado, disciplinas };
     });
 
-  const cards = periodosComCR.map((p) =>
-    el('div', { className: 'metric-card' }, [
-      el('div', { className: 'metric-label' }, `Período ${p.periodo}`),
-      el('div', { className: 'metric-value' }, formatNumberBR(p.cr, 3)),
-      el('div', { className: 'metric-sublabel' }, `${p.disciplinas.length} disciplinas`),
-    ])
-  );
-
   container.appendChild(
     el('div', { className: 'card' }, [
       el('h3', {}, 'Evolução do CR por Período'),
-      el('div', { className: 'metrics-grid' }, cards),
+      renderSvgCrEvolution(periodosComCR, dados.resumo?.crCalculado || 0),
       el('p', { className: 'text-muted' },
         `CR acumulado: ${formatNumberBR(dados.resumo?.crCalculado || 0, 3)} — Créditos com grau: ${dados.resumo?.crRComGrau || 0}`),
     ])
   );
+}
+
+export function renderSvgCrEvolution(periodos, crAcumuladoTotal) {
+  if (!periodos.length) return el('p', { className: 'text-muted' }, 'Sem dados de evolução por período.');
+
+  const width = 700;
+  const height = 300;
+  const margin = { top: 20, right: 30, bottom: 60, left: 50 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  // Série acumulada
+  let acumulado = 0;
+  let totalCrR = 0;
+  const acumData = periodos.map((p) => {
+    const d = p.disciplinas || [];
+    const crR = d.reduce((s, x) => s + (Number(x.crR) || 0), 0);
+    const pts = d.reduce((s, x) => {
+      const grau = Number(x.grau) || Number(x.pontos) || 0;
+      return s + (grau * (Number(x.crR) || 0));
+    }, 0);
+    totalCrR += crR;
+    acumulado += pts;
+    return { periodo: p.periodo, cr: totalCrR ? acumulado / totalCrR : 0 };
+  });
+
+  const x = (i) => margin.left + (i / Math.max(1, periodos.length - 1)) * innerW;
+  const y = (cr) => margin.top + innerH - (cr / 10) * innerH;
+
+  const pathLine = (pts) =>
+    `M ${pts.map((p, i) => `${x(i)},${y(p.cr)}`).join(' L ')}`;
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('class', 'chart-svg');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Gráfico de evolução do CR por período');
+
+  // grid + eixos
+  for (let v = 0; v <= 10; v += 2) {
+    const yy = y(v);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', margin.left);
+    line.setAttribute('y1', yy);
+    line.setAttribute('x2', width - margin.right);
+    line.setAttribute('y2', yy);
+    line.setAttribute('class', 'chart-grid-line');
+    svg.appendChild(line);
+
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', margin.left - 8);
+    text.setAttribute('y', yy + 4);
+    text.setAttribute('text-anchor', 'end');
+    text.setAttribute('class', 'chart-label');
+    text.textContent = String(v);
+    svg.appendChild(text);
+  }
+
+  // linha de referência CR 6.0
+  const ref = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  ref.setAttribute('x1', margin.left);
+  ref.setAttribute('y1', y(6));
+  ref.setAttribute('x2', width - margin.right);
+  ref.setAttribute('y2', y(6));
+  ref.setAttribute('stroke', 'var(--status-reprovado)');
+  ref.setAttribute('stroke-dasharray', '4 4');
+  ref.setAttribute('stroke-width', '2');
+  svg.appendChild(ref);
+
+  // labels eixo X
+  periodos.forEach((p, i) => {
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', x(i));
+    text.setAttribute('y', height - margin.bottom + 25);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('class', 'chart-label-x');
+    text.textContent = p.periodo;
+    svg.appendChild(text);
+  });
+
+  // linha acumulada
+  const pathAcum = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  pathAcum.setAttribute('d', pathLine(acumData));
+  pathAcum.setAttribute('class', 'chart-line chart-line-acumulado');
+  pathAcum.setAttribute('fill', 'none');
+  svg.appendChild(pathAcum);
+
+  // linha semestral
+  const pathSem = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  pathSem.setAttribute('d', pathLine(periodos));
+  pathSem.setAttribute('class', 'chart-line chart-line-periodo');
+  pathSem.setAttribute('fill', 'none');
+  svg.appendChild(pathSem);
+
+  // pontos com tooltip
+  const tooltip = el('div', { className: 'chart-tooltip', hidden: true });
+  acumData.forEach((p, i) => {
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', x(i));
+    circle.setAttribute('cy', y(p.cr));
+    circle.setAttribute('r', '5');
+    circle.setAttribute('class', 'chart-dot chart-dot-acumulado');
+    circle.setAttribute('tabindex', '0');
+    circle.addEventListener('mouseenter', () => {
+      tooltip.hidden = false;
+      tooltip.textContent = `${p.periodo}: CR acumulado ${formatNumberBR(p.cr, 3)}`;
+    });
+    circle.addEventListener('mouseleave', () => {
+      tooltip.hidden = true;
+    });
+    svg.appendChild(circle);
+  });
+
+  const wrapper = el('div', { className: 'chart-wrap' }, [
+    svg,
+    el('div', { className: 'chart-legenda' }, [
+      el('span', { className: 'chart-legenda-item' }, [
+        el('span', { className: 'chart-swatch chart-swatch-acumulado' }),
+        ' CR acumulado',
+      ]),
+      el('span', { className: 'chart-legenda-item' }, [
+        el('span', { className: 'chart-swatch chart-swatch-periodo' }),
+        ' CR semestral',
+      ]),
+    ]),
+    tooltip,
+  ]);
+  return wrapper;
 }
 
 /* ============================================================
@@ -638,17 +828,39 @@ function renderDisciplinas(periodos) {
 }
 
 function renderPendencias(pendencias) {
-  const item = (d) => el('li', {}, `${d.codigo} — ${d.nome} (${d.status})`);
+  const itemObr = (d) => el('li', {}, `${d.codigo || d.nome} — ${d.status || 'pendente'}`);
+
+  // Optativas: resumir em 11 slots.
+  const optativas = pendencias.optativas || [];
+  const preenchidas = optativas
+    .filter((d) => d.status && !/pendente|vedada/i.test(d.status))
+    .map((d) => `${d.codigo || ''} ${d.codigo ? '-' : ''} ${d.nome}`.trim());
+  const totalSlots = 11;
+  const slots = [];
+  for (let i = 1; i <= totalSlots; i += 1) {
+    const nome = preenchidas[i - 1];
+    if (nome) {
+      slots.push(el('li', { className: 'slot-preenchido' }, `${i}. ${nome}`));
+    } else {
+      const faltam = Math.max(0, totalSlots - preenchidas.length);
+      slots.push(el('li', { className: 'slot-vago' },
+        `Slot ${i}: Pendente (Faltam ${faltam} eletiva${faltam === 1 ? '' : 's'} para integralizar)`));
+    }
+  }
+
   return el('div', { className: 'card' }, [
     el('h3', {}, 'Pendências detectadas (BOA)'),
     el('div', { className: 'cards-grid' }, [
       el('div', {}, [
         el('h4', {}, 'Obrigatórias'),
-        el('ul', {}, (pendencias.obrigatorias || []).map(item)),
+        el('ul', { className: 'pendencias-obr' },
+          (pendencias.obrigatorias || []).length
+            ? (pendencias.obrigatorias || []).map(itemObr)
+            : [el('li', { className: 'text-muted' }, 'Nenhuma obrigatória pendente.')]),
       ]),
       el('div', {}, [
-        el('h4', {}, 'Optativas'),
-        el('ul', {}, (pendencias.optativas || []).map(item)),
+        el('h4', {}, `Optativas/Eletivas (${preenchidas.length}/${totalSlots})`),
+        el('ol', { className: 'slots-eletivas' }, slots),
       ]),
     ]),
   ]);
