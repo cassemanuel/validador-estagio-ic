@@ -56,7 +56,20 @@ def _serializar_completo(sub: Submissao) -> dict:
     extraidos = json.loads(sub.dados_extraidos_json)
     dados["periodos"] = extraidos.get("periodos") or []
     dados["pendencias"] = extraidos.get("pendencias") or {}
-    dados["pdfDisponivel"] = bool(sub.pdf_path) and sub.pdf_expurgado_em is None
+    expurgado = sub.pdf_expurgado_em is not None
+    dados["documentos"] = {
+        "boletim": {
+            "disponivel": bool(sub.boletim_path) and not expurgado,
+            "sha256": sub.boletim_sha256,
+            "url": f"/api/comissao/submissoes/{sub.id}/boletim",
+        },
+        "boa": {
+            "disponivel": bool(sub.boa_path) and not expurgado,
+            "sha256": sub.boa_sha256,
+            "url": f"/api/comissao/submissoes/{sub.id}/boa",
+        },
+    }
+    dados["pdfDisponivel"] = bool(sub.pdf_path) and not expurgado
     dados["pdfSha256"] = sub.pdf_sha256
     return dados
 
@@ -70,18 +83,42 @@ def _obter_submissao(db: Session, sub_id: int) -> Submissao:
 
 @router.get("/fila")
 def fila(
-    tipo: str = Query("regular", pattern="^(regular|revisao)$"),
+    tipo: str = Query("regular", pattern="^(regular|revisao|todos)$"),
+    q: str = Query("", max_length=100),
+    offset: int = Query(0, ge=0),
+    limite: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     _=Depends(require_comissao),
 ):
-    status = "fila_regular" if tipo == "regular" else "mesa_revisao"
+    """Fila unificada de triagem com busca por nome/DRE e paginação."""
+    status_map = {
+        "regular": ("fila_regular",),
+        "revisao": ("mesa_revisao",),
+        "todos": STATUS_ABERTOS,
+    }
+    status = status_map.get(tipo, ("fila_regular",))
+
+    query = db.query(Submissao).filter(Submissao.status.in_(status))
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            Submissao.metadata_json.ilike(like)
+            | Submissao.dados_extraidos_json.ilike(like)
+        )
+
+    total = query.count()
     subs = (
-        db.query(Submissao)
-        .filter(Submissao.status == status)
-        .order_by(Submissao.criado_em.asc())
+        query.order_by(Submissao.criado_em.asc())
+        .offset(offset)
+        .limit(limite)
         .all()
     )
-    return {"submissoes": [_serializar_resumo(s) for s in subs]}
+    return {
+        "total": total,
+        "offset": offset,
+        "limite": limite,
+        "submissoes": [_serializar_resumo(s) for s in subs],
+    }
 
 
 @router.get("/metricas")
@@ -160,8 +197,8 @@ def detalhe(
     return _serializar_completo(_obter_submissao(db, sub_id))
 
 
-@router.get("/submissoes/{sub_id}/pdf")
-def pdf(
+@router.get("/submissoes/{sub_id}/boletim")
+def boletim_pdf(
     sub_id: int,
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_comissao),
@@ -169,12 +206,39 @@ def pdf(
     sub = _obter_submissao(db, sub_id)
     if sub.pdf_expurgado_em is not None:
         raise HTTPException(410, "PDF expurgado por política de retenção.")
-    if not sub.pdf_path or not Path(sub.pdf_path).exists():
-        raise HTTPException(404, "PDF indisponível.")
+    if not sub.boletim_path or not Path(sub.boletim_path).exists():
+        raise HTTPException(404, "Boletim indisponível.")
 
-    registrar(db, user, "acesso_pdf", "submissao", sub.id)
+    registrar(db, user, "acesso_boletim", "submissao", sub.id)
     db.commit()
-    return FileResponse(sub.pdf_path, media_type="application/pdf")
+    return FileResponse(sub.boletim_path, media_type="application/pdf")
+
+
+@router.get("/submissoes/{sub_id}/boa")
+def boa_pdf(
+    sub_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_comissao),
+):
+    sub = _obter_submissao(db, sub_id)
+    if sub.pdf_expurgado_em is not None:
+        raise HTTPException(410, "PDF expurgado por política de retenção.")
+    if not sub.boa_path or not Path(sub.boa_path).exists():
+        raise HTTPException(404, "BOA indisponível.")
+
+    registrar(db, user, "acesso_boa", "submissao", sub.id)
+    db.commit()
+    return FileResponse(sub.boa_path, media_type="application/pdf")
+
+
+@router.get("/submissoes/{sub_id}/pdf")
+def pdf(
+    sub_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_comissao),
+):
+    """Endpoint legado: retorna o boletim."""
+    return boletim_pdf(sub_id, db, user)
 
 
 @router.post("/submissoes/{sub_id}/decisao")

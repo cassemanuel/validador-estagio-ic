@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from .conftest import login, payload_apto, submeter
 
@@ -27,6 +28,8 @@ def test_caso_regular_um_clique(client):
     assert resp.status_code == 200, resp.text
     sub = resp.json()
     assert sub["status"] == "fila_regular"
+    assert sub["documentos"]["boletim"]["disponivel"] is True
+    assert sub["documentos"]["boa"]["disponivel"] is True
 
     # Discente não acessa rotas da comissão
     assert client.get("/api/comissao/fila").status_code == 403
@@ -37,10 +40,14 @@ def test_caso_regular_um_clique(client):
 
     detalhe = client.get(f"/api/comissao/submissoes/{sub['id']}").json()
     assert detalhe["pdfDisponivel"] is True
+    assert detalhe["documentos"]["boletim"]["disponivel"] is True
+    assert detalhe["documentos"]["boa"]["disponivel"] is True
     assert detalhe["periodos"][0]["disciplinas"]
 
-    pdf = client.get(f"/api/comissao/submissoes/{sub['id']}/pdf")
+    pdf = client.get(f"/api/comissao/submissoes/{sub['id']}/boletim")
     assert pdf.status_code == 200
+    boa = client.get(f"/api/comissao/submissoes/{sub['id']}/boa")
+    assert boa.status_code == 200
 
     decisao = client.post(
         f"/api/comissao/submissoes/{sub['id']}/decisao",
@@ -55,6 +62,27 @@ def test_caso_regular_um_clique(client):
     minha = client.get("/api/submissoes/minha").json()["submissao"]
     assert minha["status"] == "aprovada"
     assert minha["decisao"]["decisao"] == "aprovada"
+
+
+def test_upload_duplo_obrigatorio(client):
+    login(client, "aluno1", "aluno123")
+
+    payload = payload_apto()
+    # Só boletim → erro
+    resp = client.post(
+        "/api/submissoes",
+        files={"boletim": ("boletim.pdf", b"%PDF-1.4", "application/pdf")},
+        data={"payload": json.dumps(payload)},
+    )
+    assert resp.status_code == 400
+
+    # Só BOA → erro
+    resp = client.post(
+        "/api/submissoes",
+        files={"boa": ("boa.pdf", b"%PDF-1.4", "application/pdf")},
+        data={"payload": json.dumps(payload)},
+    )
+    assert resp.status_code == 400
 
 
 def test_excecao_vai_para_mesa(client):
@@ -130,8 +158,10 @@ def test_expurgo_apos_retencao(client):
         json={"decisao": "aprovada"},
     )
 
-    pdf_path = os.path.join(os.environ["UPLOAD_DIR"], f"{sub['id']}.pdf")
-    assert os.path.exists(pdf_path)
+    with SessionLocal() as db:
+        s = db.get(Submissao, sub["id"])
+        pdf_path = s.boletim_path
+        assert pdf_path and os.path.exists(pdf_path)
 
     # Fora da janela de retenção → ainda retido
     with SessionLocal() as db:
@@ -148,9 +178,10 @@ def test_expurgo_apos_retencao(client):
 
     with SessionLocal() as db:
         assert executar_expurgo(db, settings) == 1
+        s = db.get(Submissao, sub["id"])
+        assert s.pdf_expurgado_em is not None
         assert not os.path.exists(pdf_path)
-        assert db.get(Submissao, sub["id"]).pdf_expurgado_em is not None
 
     # PDF expurgado → 410
-    resp = client.get(f"/api/comissao/submissoes/{sub['id']}/pdf")
+    resp = client.get(f"/api/comissao/submissoes/{sub['id']}/boletim")
     assert resp.status_code == 410

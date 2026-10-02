@@ -1,6 +1,7 @@
 /**
- * Mesa de Revisão: split-screen com o PDF original à esquerda e os dados
- * extraídos/declarados + exceções + deliberação à direita.
+ * Mesa de Análise Individual: split-screen com abas para alternar entre
+ * Boletim e BOA, lado a lado com dados extraídos, exceções declaradas e
+ * histórico de CR.
  */
 
 import { api } from '../api/client.js';
@@ -10,7 +11,9 @@ import {
   clearElement,
   formatNumberBR,
 } from '../ui/dom.js';
+import { calcularCRAcumulado } from '../domain/cr.js';
 import { carregarPainel } from './painel.js';
+import { navegarPara } from '../router.js';
 
 const TIPO_EXCECAO = {
   equivalencia: 'Equivalência',
@@ -18,12 +21,10 @@ const TIPO_EXCECAO = {
   dispensa: 'Dispensa',
 };
 
-export async function abrirMesa(subId) {
-  const mesa = document.getElementById('comissao-mesa');
-  const fila = document.getElementById('comissao-fila');
+export async function abrirMesa(subId, onNavegar) {
+  const mesa = document.getElementById('admin-mesa');
+  const container = document.getElementById('view-admin-mesa');
   clearElement(mesa);
-  mesa.hidden = false;
-  fila.hidden = true;
 
   let sub;
   try {
@@ -31,52 +32,93 @@ export async function abrirMesa(subId) {
   } catch (err) {
     mesa.appendChild(el('div', { className: 'card' },
       el('p', { className: 'text-muted' }, err.message)));
+    if (onNavegar) onNavegar();
     return;
   }
 
-  mesa.appendChild(
-    el('div', { className: 'mesa' }, [
-      renderLadoPdf(sub),
-      renderLadoDados(sub),
-    ])
-  );
+  const voltar = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, '← Voltar à fila');
+  voltar.addEventListener('click', () => navegarPara('/admin/fila'));
+
+  const header = el('div', { className: 'admin-header' }, [
+    el('div', {}, [
+      el('h2', {}, sub.metadata?.nome || `Processo #${sub.id}`),
+      el('p', { className: 'text-muted' },
+        `DRE ${sub.metadata?.dre || '—'} · ${sub.metadata?.curso || '—'} · ${sub.tipoDocumento || '—'}`),
+    ]),
+    voltar,
+  ]);
+
+  mesa.appendChild(header);
+  mesa.appendChild(el('div', { className: 'mesa' }, [
+    renderLadoPdf(sub),
+    renderLadoDados(sub),
+  ]));
+
+  if (onNavegar) onNavegar();
 }
 
-/* ============================================================
-   Lado esquerdo: PDF original
-   ============================================================ */
-
 function renderLadoPdf(sub) {
-  const iframe = el('iframe', {
-    className: 'mesa-pdf',
-    src: `/api/comissao/submissoes/${sub.id}/pdf`,
-    title: 'PDF original submetido pelo discente',
+  const docs = sub.documentos || {};
+  const [abaAtiva, setAbaAtiva] = useState('boletim');
+
+  const tabs = el('div', { className: 'app-nav segmented' });
+  const conteudo = el('div', { className: 'mesa-pdf-wrap' });
+
+  const renderAba = (nome) => {
+    clearElement(conteudo);
+    const doc = docs[nome];
+    if (!doc?.disponivel) {
+      conteudo.appendChild(el('div', { className: 'card' }, [
+        el('p', { className: 'text-muted' },
+          `${nome.toUpperCase()} indisponível ou expurgado por política de retenção.`),
+      ]));
+      return;
+    }
+    conteudo.appendChild(el('iframe', {
+      className: 'mesa-pdf',
+      src: doc.url,
+      title: `PDF ${nome.toUpperCase()} submetido pelo discente`,
+    }));
+  };
+
+  ['boletim', 'boa'].forEach((nome) => {
+    const btn = el('button', {
+      className: `tab-btn ${abaAtiva() === nome ? 'active' : ''}`,
+      type: 'button',
+      'aria-pressed': String(abaAtiva() === nome),
+    }, nome === 'boletim' ? 'Boletim' : 'BOA');
+    btn.addEventListener('click', () => {
+      setAbaAtiva(nome);
+      [...tabs.children].forEach((b) => {
+        const ativo = b === btn;
+        b.classList.toggle('active', ativo);
+        b.setAttribute('aria-pressed', String(ativo));
+      });
+      renderAba(nome);
+    });
+    tabs.appendChild(btn);
   });
 
-  const conteudo = sub.pdfDisponivel
-    ? iframe
-    : el('div', { className: 'card' },
-        el('p', { className: 'text-muted' },
-          'PDF expurgado por política de retenção (LGPD).'));
+  renderAba(abaAtiva());
 
+  const sha256 = docs.boletim?.sha256 || sub.pdfSha256;
   return el('div', { className: 'mesa-col' }, [
-    el('h3', {}, 'Documento original'),
-    sub.pdfSha256
-      ? el('p', { className: 'text-muted mesa-hash' },
-          `sha256: ${sub.pdfSha256.slice(0, 24)}…`)
-      : null,
+    el('h3', {}, 'Documentos originais'),
+    sha256 ? el('p', { className: 'text-muted mesa-hash' },
+      `sha256 boletim: ${sha256.slice(0, 24)}…`) : null,
+    tabs,
     conteudo,
   ]);
 }
 
-/* ============================================================
-   Lado direito: dados extraídos + exceções + deliberação
-   ============================================================ */
+function useState(initial) {
+  let value = initial;
+  return [() => value, (v) => { value = v; }];
+}
 
 function renderLadoDados(sub) {
   const col = el('div', { className: 'mesa-col' }, [el('h3', {}, 'Dados extraídos')]);
-
-  const { metadata, diagnostico, alertas } = sub;
+  const { metadata, diagnostico, alertas, periodos } = sub;
 
   col.appendChild(
     el('div', { className: 'card' },
@@ -88,8 +130,7 @@ function renderLadoDados(sub) {
         ['Documento', sub.tipoDocumento],
       ]
         .filter(([, v]) => v)
-        .map(([k, v]) => el('p', {}, [el('strong', {}, `${k}: `), String(v)]))
-    )
+        .map(([k, v]) => el('p', {}, [el('strong', {}, `${k}: `), String(v)])))
   );
 
   if (alertas?.length) {
@@ -110,7 +151,7 @@ function renderLadoDados(sub) {
   if (diagnostico?.criterios?.length) {
     col.appendChild(
       el('div', { className: 'card' }, [
-        el('h4', {}, 'Diagnóstico (declarado × recalculado)'),
+        el('h4', {}, 'Diagnóstico'),
         el('ul', { className: 'estagio-criterios' },
           diagnostico.criterios.map((c) =>
             el('li', { className: c.ok ? 'criterio-ok' : 'criterio-falta' }, [
@@ -125,11 +166,33 @@ function renderLadoDados(sub) {
     );
   }
 
+  col.appendChild(renderEvolucaoCR(periodos));
   col.appendChild(renderExcecoes(sub));
   col.appendChild(renderTabelaDisciplinas(sub));
   col.appendChild(renderDeliberacao(sub));
 
   return col;
+}
+
+function renderEvolucaoCR(periodos) {
+  const periodosValidos = (periodos || [])
+    .filter((p) => String(p.periodo).match(/^\d{4}\/\d$/));
+  const cards = periodosValidos.map((p) => {
+    const disciplinas = p.disciplinas || [];
+    const { crCalculado } = calcularCRAcumulado({ periodos: [p] });
+    return el('div', { className: 'metric-card' }, [
+      el('div', { className: 'metric-label' }, `Período ${p.periodo}`),
+      el('div', { className: 'metric-value' }, formatNumberBR(crCalculado, 3)),
+      el('div', { className: 'metric-sublabel' }, `${disciplinas.length} disciplinas`),
+    ]);
+  });
+
+  return el('div', { className: 'card' }, [
+    el('h4', {}, 'Evolução do CR por Período'),
+    cards.length
+      ? el('div', { className: 'metrics-grid mini' }, cards)
+      : el('p', { className: 'text-muted' }, 'Sem dados de evolução por período.'),
+  ]);
 }
 
 function renderExcecoes(sub) {
@@ -145,8 +208,7 @@ function renderExcecoes(sub) {
     ]);
     return el('li', { className: 'mesa-excecao' }, [
       el('p', {}, [
-        el('strong', {},
-          `${TIPO_EXCECAO[e.tipo] || e.tipo} de ${e.codigoRequisito}`),
+        el('strong', {}, `${TIPO_EXCECAO[e.tipo] || e.tipo} de ${e.codigoRequisito}`),
         e.codigoCursada ? ` por ${e.codigoCursada}` : '',
       ]),
       el('p', { className: 'text-muted' }, e.justificativa),
@@ -157,8 +219,7 @@ function renderExcecoes(sub) {
   return el('div', { className: 'card' }, [
     el('h4', {}, 'Exceções declaradas'),
     el('ul', { className: 'estagio-criterios' }, itens),
-    el('p', { className: 'text-muted' },
-      'Sem marcação, a exceção permanece pendente.'),
+    el('p', { className: 'text-muted' }, 'Sem marcação, a exceção permanece pendente.'),
   ]);
 }
 
@@ -184,8 +245,7 @@ function renderTabelaDisciplinas(sub) {
           el('td', {}, formatNumberBR(d.crR, 1)),
           el('td', {}, d.grau != null ? formatNumberBR(d.grau, 1) : '—'),
           el('td', {}, [
-            el('span', { className: `badge ${badgeClassForSituacao(d.situacao)}` },
-              d.situacao),
+            el('span', { className: `badge ${badgeClassForSituacao(d.situacao)}` }, d.situacao),
           ]),
         ])
       );
@@ -220,7 +280,7 @@ function renderDeliberacao(sub) {
   const erro = el('p', { className: 'login-erro', role: 'alert', hidden: true });
 
   const coletarDecisoesExcecoes = () =>
-    [...document.querySelectorAll(`input[data-exc-id]:checked`)].map((i) => ({
+    [...document.querySelectorAll('input[data-exc-id]:checked')].map((i) => ({
       id: Number(i.dataset.excId),
       status: i.dataset.status,
     }));
@@ -240,42 +300,27 @@ function renderDeliberacao(sub) {
           excecoes: coletarDecisoesExcecoes(),
         },
       });
-      voltarParaFila();
+      navegarPara('/admin/fila');
     } catch (err) {
       erro.textContent = err.message;
       erro.hidden = false;
     }
   };
 
-  const voltar = el('button', {
-    className: 'btn btn-secondary', type: 'button',
-  }, '← Voltar à fila');
-  voltar.addEventListener('click', voltarParaFila);
-
-  const botoes = el('div', { className: 'actions-row' }, [
-    botaoDecisao('Aprovar', 'btn-primary', () => decidir('aprovada')),
-    botaoDecisao('Indeferir', 'btn-danger', () => decidir('indeferida')),
-    botaoDecisao('Devolver', 'btn-secondary', () => decidir('devolvida')),
-  ]);
+  const botoes = el('div', { className: 'actions-row' }, []);
+  const criarBotao = (label, classe, decisao) => {
+    const btn = el('button', { className: `btn ${classe}`, type: 'button' }, label);
+    btn.addEventListener('click', () => decidir(decisao));
+    return btn;
+  };
+  botoes.appendChild(criarBotao('Aprovar', 'btn-primary', 'aprovada'));
+  botoes.appendChild(criarBotao('Indeferir', 'btn-danger', 'indeferida'));
+  botoes.appendChild(criarBotao('Devolver', 'btn-secondary', 'devolvida'));
 
   return el('div', { className: 'card' }, [
     el('h4', {}, 'Deliberação'),
     motivo,
     erro,
     botoes,
-    voltar,
   ]);
-}
-
-function botaoDecisao(rotulo, classe, onClick) {
-  const btn = el('button', { className: `btn ${classe}`, type: 'button' }, rotulo);
-  btn.addEventListener('click', onClick);
-  return btn;
-}
-
-function voltarParaFila() {
-  document.getElementById('comissao-mesa').hidden = true;
-  const fila = document.getElementById('comissao-fila');
-  fila.hidden = false;
-  carregarPainel();
 }

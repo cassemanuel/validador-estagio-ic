@@ -4,8 +4,8 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, Response
 
 from .api import auth_routes, comissao, submissoes
 from .config import settings
@@ -39,6 +39,16 @@ def health():
     return {"ok": True}
 
 
-# Estáticos do frontend por último — rotas /api/* têm precedência.
+# Fallback para SPA: serve index.html para rotas do frontend, preservando
+# arquivos estáticos (css, js, vendor, fonts) quando existem.
 if _FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=_FRONTEND_DIR, html=True), name="frontend")
+    INDEX_PATH = _FRONTEND_DIR / "index.html"
+
+    @app.get("/{path:path}")
+    async def spa_fallback(request: Request, path: str):
+        candidate = _FRONTEND_DIR / path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        if path.startswith(("css/", "js/", "vendor/", "fonts/")):
+            return Response(status_code=404)
+        return FileResponse(INDEX_PATH)

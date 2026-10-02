@@ -84,10 +84,13 @@ def payload_apto(**overrides):
     return payload
 
 
-def submeter(client, payload=None, pdf_bytes=b"%PDF-1.4 fake test fixture"):
+def submeter(client, payload=None, boletim_bytes=b"%PDF-1.4 fake boletim", boa_bytes=b"%PDF-1.4 fake boa"):
     payload = payload if payload is not None else payload_apto()
     return client.post(
         "/api/submissoes",
-        files={"pdf": ("boa.pdf", pdf_bytes, "application/pdf")},
+        files={
+            "boletim": ("boletim.pdf", boletim_bytes, "application/pdf"),
+            "boa": ("boa.pdf", boa_bytes, "application/pdf"),
+        },
         data={"payload": json.dumps(payload)},
     )

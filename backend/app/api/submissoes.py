@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -49,6 +50,16 @@ def _serializar(sub: Submissao, decisao=None) -> dict:
         "criadoEm": sub.criado_em.isoformat() if sub.criado_em else None,
         "concluidoEm": sub.concluido_em.isoformat() if sub.concluido_em else None,
         "autorizacao": dados_autorizacao(sub, settings.autorizacao_validade_dias),
+        "documentos": {
+            "boletim": {
+                "sha256": sub.boletim_sha256,
+                "disponivel": bool(sub.boletim_path),
+            },
+            "boa": {
+                "sha256": sub.boa_sha256,
+                "disponivel": bool(sub.boa_path),
+            },
+        },
     }
     if decisao:
         resultado["decisao"] = {
@@ -61,17 +72,47 @@ def _serializar(sub: Submissao, decisao=None) -> dict:
     return resultado
 
 
+def _validar_pdf(upload: UploadFile | None, nome: str) -> bytes:
+    if not upload or not (upload.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, f"Envie o PDF do {nome}.")
+    if (upload.content_type or "") not in (
+        "application/pdf",
+        "application/octet-stream",
+        "binary/octet-stream",
+    ):
+        raise HTTPException(400, f"O arquivo {nome} deve ser um PDF válido.")
+    dados = upload.file.read()
+    if len(dados) > settings.max_pdf_size:
+        raise HTTPException(400, f"Arquivo {nome} muito grande (máx. 10 MB).")
+    return dados
+
+
+def _salvar_pdf(
+    upload: UploadFile,
+    upload_dir: Path,
+    tipo: str,
+    dre: str,
+    ts: str,
+) -> tuple[Path, str]:
+    nome_seguro = f"{tipo}_{dre}_{ts}.pdf"
+    caminho = upload_dir / nome_seguro
+    dados = upload.file.read()
+    caminho.write_bytes(dados)
+    return caminho, hashlib.sha256(dados).hexdigest()
+
+
 @router.post("")
 def criar_submissao(
     payload: str = Form(...),
-    pdf: UploadFile = File(...),
+    boletim: UploadFile | None = File(None),
+    boa: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_discente),
 ):
-    """Recebe o PDF bruto + dados extraídos no cliente (multipart).
+    """Recebe Boletim + BOA + dados extraídos no cliente (multipart).
 
-    O documento só chega ao servidor após a confirmação interativa do
-    discente — o parsing roda inteiro no navegador antes disso.
+    Ambos os documentos são obrigatórios. O parsing roda no navegador;
+    o servidor faz saneamento, triagem e persistência dos dois PDFs.
     """
     ativa = (
         db.query(Submissao)
@@ -84,19 +125,13 @@ def criar_submissao(
     if ativa:
         raise HTTPException(409, "Já existe uma submissão em andamento.")
 
-    if not (pdf.filename or "").lower().endswith(".pdf") and (
-        pdf.content_type or ""
-    ) != "application/pdf":
-        raise HTTPException(400, "Envie um arquivo PDF válido.")
-
     try:
         body = SubmissaoPayload.model_validate_json(payload)
     except ValueError:
         raise HTTPException(400, "Payload JSON inválido.")
 
-    pdf_bytes = pdf.file.read()
-    if len(pdf_bytes) > settings.max_pdf_size:
-        raise HTTPException(400, "Arquivo muito grande (máx. 10 MB).")
+    _validar_pdf(boletim, "boletim")
+    _validar_pdf(boa, "BOA")
 
     dados = body.model_dump(exclude={"excecoes"})
     regras = get_regras()
@@ -120,16 +155,28 @@ def criar_submissao(
         alertas_saneamento_json=json.dumps(
             resultado["alertas"], ensure_ascii=False
         ),
-        pdf_sha256=hashlib.sha256(pdf_bytes).hexdigest(),
     )
     db.add(sub)
-    db.flush()  # garante sub.id para nomear o arquivo
+    db.flush()  # garante sub.id para auditoria
 
     upload_dir = Path(settings.upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
-    pdf_path = upload_dir / f"{sub.id}.pdf"
-    pdf_path.write_bytes(pdf_bytes)
-    sub.pdf_path = str(pdf_path)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    dre = str(body.metadata.get("dre") or user.username or str(user.id))
+
+    boletim.file.seek(0)
+    boa.file.seek(0)
+    boletim_path, boletim_hash = _salvar_pdf(
+        boletim, upload_dir, "boletim", dre, ts
+    )
+    boa_path, boa_hash = _salvar_pdf(boa, upload_dir, "boa", dre, ts)
+
+    sub.boletim_path = str(boletim_path)
+    sub.boletim_sha256 = boletim_hash
+    sub.boa_path = str(boa_path)
+    sub.boa_sha256 = boa_hash
+    sub.pdf_path = sub.boletim_path
+    sub.pdf_sha256 = sub.boletim_sha256
 
     for e in body.excecoes:
         db.add(

@@ -30,6 +30,12 @@
         <span>Comissão de Estágio — IC / UFRJ</span>
       </div>
     </div>
+    <nav class="header-nav" id="header-nav" hidden>
+      <a href="/admin/dashboard" data-spa class="nav-link">Dashboard</a>
+      <a href="/admin/fila" data-spa class="nav-link">Fila</a>
+      <a href="/admin/mesa" data-spa class="nav-link">Mesa</a>
+      <a href="/admin/autorizacoes" data-spa class="nav-link">Autorizações</a>
+    </nav>
     <div class="header-actions">
       <span id="user-badge" class="user-badge" hidden></span>
       <button
@@ -93,33 +99,25 @@
               class="btn btn-secondary btn-sm"
               data-dev-login="aluno1"
               data-dev-senha="aluno123"
-            >
-              Aluno 1
-            </button>
+            >Aluno 1</button>
             <button
               type="button"
               class="btn btn-secondary btn-sm"
               data-dev-login="aluno2"
               data-dev-senha="aluno123"
-            >
-              Aluno 2
-            </button>
+            >Aluno 2</button>
             <button
               type="button"
               class="btn btn-secondary btn-sm"
               data-dev-login="aluno3"
               data-dev-senha="aluno123"
-            >
-              Aluno 3
-            </button>
+            >Aluno 3</button>
             <button
               type="button"
               class="btn btn-secondary btn-sm"
               data-dev-login="comissao1"
               data-dev-senha="comissao123"
-            >
-              Comissão
-            </button>
+            >Comissão</button>
           </div>
           <p class="text-muted login-dev-hint">
             Credenciais de dev: <code>aluno1</code>–<code>aluno3 / aluno123</code>
@@ -135,26 +133,50 @@
 
       <div id="discente-fluxo">
         <div class="panel-header">
-          <h2>Submeter Boletim para Validação de Estágio</h2>
+          <h2>Submeter Documentos para Validação de Estágio</h2>
           <p class="text-muted">
-            Envie o <strong>BOA</strong> ou o <strong>Boletim Não Oficial</strong>
-            do SIGA. O documento é lido no seu navegador e você confere os dados
-            antes de enviar à Comissão.
+            Ambos os documentos são obrigatórios: o <strong>Boletim Não Oficial</strong>
+            traz o histórico de notas e CR, e o <strong>BOA</strong> traz a grade
+            curricular e as pendências do PPC 2022.
           </p>
         </div>
 
-        <div class="dropzone" id="pdf-dropzone">
-          <input
-            type="file"
-            id="pdf-input"
-            accept=".pdf,application/pdf"
-            aria-label="Selecionar PDF do boletim"
-          />
-          <label for="pdf-input" class="dropzone-label">
-            <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
-            <span>Clique ou arraste o PDF aqui</span>
-          </label>
-          <div class="dropzone-hint">BOA ou Boletim Não Oficial do SIGA/UFRJ</div>
+        <div class="upload-grid">
+          <div class="upload-card" id="upload-boletim-card">
+            <h3><i class="bi bi-file-earmark-text"></i> Boletim Não Oficial</h3>
+            <div class="dropzone" id="boletim-dropzone">
+              <input
+                type="file"
+                id="boletim-input"
+                accept=".pdf,application/pdf"
+                aria-label="Selecionar PDF do Boletim Não Oficial"
+              />
+              <label for="boletim-input" class="dropzone-label">
+                <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+                <span>Clique ou arraste o PDF aqui</span>
+              </label>
+              <div class="dropzone-hint">Histórico de notas do SIGA/UFRJ</div>
+            </div>
+            <div class="upload-badge hidden" id="boletim-badge"></div>
+          </div>
+
+          <div class="upload-card" id="upload-boa-card">
+            <h3><i class="bi bi-grid-3x3-gap"></i> BOA</h3>
+            <div class="dropzone" id="boa-dropzone">
+              <input
+                type="file"
+                id="boa-input"
+                accept=".pdf,application/pdf"
+                aria-label="Selecionar PDF do BOA"
+              />
+              <label for="boa-input" class="dropzone-label">
+                <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+                <span>Clique ou arraste o PDF aqui</span>
+              </label>
+              <div class="dropzone-hint">Boletim de Orientação Acadêmica do SIGA</div>
+            </div>
+            <div class="upload-badge hidden" id="boa-badge"></div>
+          </div>
         </div>
 
         <div id="pdf-progress" class="progress hidden" aria-live="polite">
@@ -162,35 +184,71 @@
         </div>
 
         <div id="discente-revisao" hidden></div>
+        <div id="discente-analise"></div>
       </div>
     </section>
 
-    <!-- ===== Painel da Comissão ===== -->
-    <section id="view-comissao" class="tab-panel" hidden>
-      <div id="comissao-metricas"></div>
+    <!-- ===== Admin: Dashboard ===== -->
+    <section id="view-admin-dashboard" class="tab-panel" hidden>
+      <div class="admin-header">
+        <h2>Dashboard</h2>
+        <p class="text-muted">Visão consolidada do fluxo de estágio.</p>
+      </div>
+      <div id="admin-metricas"></div>
+      <div class="dashboard-grid">
+        <div id="admin-auditoria-card" class="card"></div>
+        <div id="admin-alertas-card" class="card"></div>
+      </div>
+    </section>
+
+    <!-- ===== Admin: Fila de Triagem ===== -->
+    <section id="view-admin-fila" class="tab-panel" hidden>
+      <div class="admin-header">
+        <h2>Fila de Triagem</h2>
+        <p class="text-muted">Processos em análise, com busca, paginação e ações rápidas.</p>
+      </div>
 
       <nav class="app-nav segmented" aria-label="Filas da comissão">
-        <button class="tab-btn active" data-fila="regular" type="button" aria-pressed="true">
+        <button class="tab-btn active" data-fila="todos" type="button" aria-pressed="true">
+          Todos
+          <span class="seg-badge" id="badge-todos" hidden></span>
+        </button>
+        <button class="tab-btn" data-fila="regular" type="button" aria-pressed="false">
           <i class="bi bi-lightning-charge" aria-hidden="true"></i>
-          Fila de Casos Regulares
+          Regulares
           <span class="seg-badge" id="badge-regular" hidden></span>
         </button>
         <button class="tab-btn" data-fila="revisao" type="button" aria-pressed="false">
           <i class="bi bi-layout-split" aria-hidden="true"></i>
-          Mesa de Revisão
+          Revisão
           <span class="seg-badge" id="badge-revisao" hidden></span>
         </button>
       </nav>
 
-      <div id="comissao-fila"></div>
-      <div id="comissao-mesa" hidden></div>
+      <div class="fila-toolbar">
+        <input type="search" id="fila-busca" class="input-busca" placeholder="Buscar por nome ou DRE..." />
+      </div>
 
-      <section
-        id="comissao-autorizacoes"
-        aria-labelledby="autorizacoes-titulo"
-      ></section>
+      <div id="admin-fila"></div>
+      <div id="admin-paginacao" class="paginacao"></div>
+    </section>
 
-      <section id="comissao-auditoria" aria-labelledby="auditoria-titulo"></section>
+    <!-- ===== Admin: Mesa de Análise Individual ===== -->
+    <section id="view-admin-mesa" class="tab-panel" hidden>
+      <div class="admin-header">
+        <h2>Mesa de Análise</h2>
+        <a href="/admin/fila" data-spa class="btn btn-secondary btn-sm">&larr; Voltar à fila</a>
+      </div>
+      <div id="admin-mesa"></div>
+    </section>
+
+    <!-- ===== Admin: Autorizações ===== -->
+    <section id="view-admin-autorizacoes" class="tab-panel" hidden>
+      <div class="admin-header">
+        <h2>Autorizações e Deferimentos</h2>
+        <p class="text-muted">Liberações deferidas e validade de 90 dias.</p>
+      </div>
+      <div id="admin-autorizacoes"></div>
     </section>
   </main>
 

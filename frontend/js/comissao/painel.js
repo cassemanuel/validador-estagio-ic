@@ -1,54 +1,62 @@
 /**
- * Painel da Comissão: cards de métricas, Fila de Casos Regulares
- * (aprovação em 1 clique), Mesa de Revisão e histórico de auditoria.
+ * Painel administrativo da Comissão: 4 views dedicadas.
+ *
+ *   /admin/dashboard      → Dashboard Geral (métricas + auditoria + alertas)
+ *   /admin/fila           → Fila de Triagem (tabela unificada, busca, paginação)
+ *   /admin/mesa           → Mesa de Análise Individual (selecionada a partir da fila)
+ *   /admin/autorizacoes   → Autorizações e Deferimentos
  */
 
 import { api } from '../api/client.js';
-import { el, clearElement } from '../ui/dom.js';
+import { el, clearElement, formatNumberBR } from '../ui/dom.js';
+import { navegarPara } from '../router.js';
 import { abrirMesa } from './mesa.js';
 
-let filaAtual = 'regular';
+let filaParams = { tipo: 'todos', q: '', offset: 0, limite: 25 };
 
-export function initPainel() {
-  document.querySelectorAll('#view-comissao .tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => ativarFila(btn.dataset.fila));
-  });
-  carregarPainel();
+const ACAO_LABEL = {
+  login: 'Login',
+  submissao_criada: 'Submissão recebida',
+  acesso_pdf: 'Acesso ao Boletim',
+  acesso_boletim: 'Acesso ao Boletim',
+  acesso_boa: 'Acesso ao BOA',
+  decisao: 'Deliberação',
+  expurgo_pdfs: 'Expurgo de PDFs',
+  arquivamento: 'Arquivamento de logs',
+};
+
+const fmtData = (iso) =>
+  iso ? new Date(iso).toLocaleDateString('pt-BR') : '—';
+
+export function initPainel(viewAtual = 'view-admin-dashboard') {
+  initFilaTabs();
+  initBuscaFila();
+  carregarPainel(viewAtual);
 }
 
-/**
- * Alterna a aba segmentada para a fila indicada ('regular' | 'revisao'),
- * fecha a mesa aberta e rola até a barra de filas.
- */
-export function ativarFila(tipo) {
-  filaAtual = tipo;
-  document.querySelectorAll('#view-comissao .tab-btn').forEach((b) => {
-    const ativo = b.dataset.fila === tipo;
-    b.classList.toggle('active', ativo);
-    b.setAttribute('aria-pressed', String(ativo));
-  });
-  document.getElementById('comissao-mesa').hidden = true;
-  document.getElementById('comissao-fila').hidden = false;
-  document
-    .querySelector('#view-comissao .app-nav')
-    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  carregarFila();
-}
-
-/** Recarrega métricas, auditoria, autorizações e fila. */
-export function carregarPainel() {
-  carregarMetricas();
-  carregarAuditoria();
-  carregarAutorizacoes();
-  carregarFila();
+export async function carregarPainel(viewAtual) {
+  if (viewAtual === 'view-admin-dashboard') {
+    await Promise.all([carregarMetricas(), carregarAuditoriaDashboard()]);
+  }
+  if (viewAtual === 'view-admin-fila') await carregarFila();
+  if (viewAtual === 'view-admin-mesa') {
+    const mesa = document.getElementById('admin-mesa');
+    if (!mesa.innerHTML.trim()) {
+      clearElement(mesa);
+      mesa.appendChild(el('div', { className: 'card' }, [
+        el('p', { className: 'text-muted' }, 'Selecione um processo na Fila para abrir a mesa de análise.'),
+      ]));
+    }
+  }
+  if (viewAtual === 'view-admin-autorizacoes') await carregarAutorizacoes();
 }
 
 /* ============================================================
-   Métricas agregadas
+   Dashboard Geral
    ============================================================ */
 
 async function carregarMetricas() {
-  const container = document.getElementById('comissao-metricas');
+  const container = document.getElementById('admin-metricas');
   clearElement(container);
 
   let m;
@@ -58,56 +66,47 @@ async function carregarMetricas() {
     return;
   }
 
-  atualizarBadges(m);
-
-  const vencendo = m.autorizacoes_vencendo;
-
-  // Chips do card "Pendentes": atalho direto para cada fila.
   const chipFila = (tipo, label, count) => {
     const chip = el('button', {
-      className: 'seg-chip',
-      type: 'button',
+      className: 'seg-chip', type: 'button',
       title: `Abrir ${tipo === 'regular' ? 'Fila de Casos Regulares' : 'Mesa de Revisão'}`,
     }, `${label}: ${count}`);
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
-      ativarFila(tipo);
+      navegarPara('/admin/fila');
     });
     return chip;
   };
 
+  const vencendo = m.autorizacoes_vencendo || 0;
   const cards = [
     {
       label: 'Solicitações recebidas',
-      valor: `${m.total}`,
-      detalhe: `no semestre ${m.semestre}: ${m.total_semestre}`,
+      valor: `${m.total || 0}`,
+      detalhe: `no semestre ${m.semestre || ''}: ${m.total_semestre || 0}`,
     },
-    { label: 'Deferidos', valor: `${m.deferidos}` },
-    { label: 'Indeferidos', valor: `${m.indeferidos}` },
+    { label: 'Deferidos', valor: `${m.deferidos || 0}` },
+    { label: 'Indeferidos', valor: `${m.indeferidos || 0}` },
     {
       label: 'Pendentes',
-      valor: `${m.pendentes}`,
-      // Clique no card abre a fila com pendências (regular tem precedência).
-      onClick: () => ativarFila(m.fila_regular > 0 ? 'regular' : 'revisao'),
+      valor: `${m.pendentes || 0}`,
+      onClick: () => navegarPara('/admin/fila'),
       detalheNode: el('p', { className: 'text-muted metric-det' }, [
-        chipFila('regular', 'regular', m.fila_regular),
-        ' ',
-        chipFila('revisao', 'mesa', m.mesa_revisao),
+        chipFila('regular', 'regular', m.fila_regular || 0), ' ',
+        chipFila('revisao', 'mesa', m.mesa_revisao || 0),
       ]),
     },
     {
       label: 'Autorizações a vencer',
       valor: `${vencendo}`,
-      detalhe:
-        `${m.autorizacoes_vigentes ?? m.deferidos} vigentes · ` +
-        `validade ${m.validade_autorizacao_dias ?? 90}d · ` +
-        `alerta ≤ ${m.janela_vencimento_dias ?? 30}d`,
+      detalhe: `${m.autorizacoes_vigentes || m.deferidos || 0} vigentes · validade ${m.validade_autorizacao_dias || 90}d · alerta ≤ ${m.janela_vencimento_dias || 30}d`,
       cls: vencendo > 0 ? 'metric-alerta' : '',
+      onClick: () => navegarPara('/admin/autorizacoes'),
     },
     {
       label: 'Relatórios de estágio',
-      valor: `${m.relatorios.entregues} entregues`,
-      detalhe: `${m.relatorios.pendentes} pendentes no semestre`,
+      valor: `${(m.relatorios && m.relatorios.entregues) || 0} entregues`,
+      detalhe: `${(m.relatorios && m.relatorios.pendentes) || 0} pendentes no semestre`,
     },
   ];
 
@@ -125,9 +124,7 @@ async function carregarMetricas() {
           el('span', { className: 'cr-detail-label' }, c.label),
           el('p', { className: 'metric-value' }, c.valor),
           c.detalheNode ||
-            (c.detalhe
-              ? el('p', { className: 'text-muted metric-det' }, c.detalhe)
-              : null),
+            (c.detalhe ? el('p', { className: 'text-muted metric-det' }, c.detalhe) : null),
         ]);
         if (c.onClick) {
           card.addEventListener('click', c.onClick);
@@ -143,33 +140,8 @@ async function carregarMetricas() {
   );
 }
 
-function atualizarBadges(metricas) {
-  const badges = {
-    'badge-regular': metricas.fila_regular,
-    'badge-revisao': metricas.mesa_revisao,
-  };
-  Object.entries(badges).forEach(([id, count]) => {
-    const badge = document.getElementById(id);
-    badge.hidden = !count;
-    badge.textContent = count;
-  });
-}
-
-/* ============================================================
-   Histórico de auditoria (10 últimos eventos)
-   ============================================================ */
-
-const ACAO_LABEL = {
-  login: 'Login',
-  submissao_criada: 'Submissão recebida',
-  acesso_pdf: 'Acesso ao PDF',
-  decisao: 'Deliberação',
-  expurgo_pdf: 'Expurgo de PDF',
-  arquivamento: 'Arquivamento de logs',
-};
-
-async function carregarAuditoria() {
-  const container = document.getElementById('comissao-auditoria');
+async function carregarAuditoriaDashboard() {
+  const container = document.getElementById('admin-auditoria-card');
   clearElement(container);
 
   let eventos;
@@ -182,38 +154,210 @@ async function carregarAuditoria() {
   const itens = eventos.length
     ? eventos.map((e) =>
         el('li', { className: 'audit-item' }, [
-          el('span', { className: 'audit-ts' },
-            new Date(e.ts).toLocaleString('pt-BR')),
-          el('span', { className: 'audit-ator' },
-            `${e.ator}${e.papel ? ` (${e.papel})` : ''}`),
-          el('span', { className: 'audit-acao' },
-            ACAO_LABEL[e.acao] || e.acao),
-          el('span', { className: 'text-muted' },
-            e.entidade ? `${e.entidade} #${e.entidade_id ?? '—'}` : ''),
+          el('span', { className: 'audit-ts' }, fmtData(e.ts)),
+          el('span', { className: 'audit-ator' }, `${e.ator}${e.papel ? ` (${e.papel})` : ''}`),
+          el('span', { className: 'audit-acao' }, ACAO_LABEL[e.acao] || e.acao),
         ])
       )
     : [el('li', { className: 'text-muted' }, 'Nenhum evento registrado.')];
 
+  container.appendChild(el('h3', {}, 'Auditoria Recente'));
+  container.appendChild(el('p', { className: 'text-muted' }, 'Últimos eventos do registro imutável. Logs são retidos por 6 meses.'));
+  container.appendChild(el('ul', { className: 'audit-list' }, itens));
+}
+
+/* ============================================================
+   Fila de Triagem (tabela unificada, busca, paginação)
+   ============================================================ */
+
+function initFilaTabs() {
+  document.querySelectorAll('#view-admin-fila .tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      filaParams = { ...filaParams, tipo: btn.dataset.fila, offset: 0 };
+      atualizarTabsFila(btn.dataset.fila);
+      carregarFila();
+    });
+  });
+}
+
+function atualizarTabsFila(tipo) {
+  document.querySelectorAll('#view-admin-fila .tab-btn').forEach((b) => {
+    const ativo = b.dataset.fila === tipo;
+    b.classList.toggle('active', ativo);
+    b.setAttribute('aria-pressed', String(ativo));
+  });
+}
+
+function initBuscaFila() {
+  const input = document.getElementById('fila-busca');
+  if (!input) return;
+  let debounce;
+  input.addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      filaParams = { ...filaParams, q: input.value.trim(), offset: 0 };
+      carregarFila();
+    }, 300);
+  });
+}
+
+export async function carregarFila() {
+  const container = document.getElementById('admin-fila');
+  const paginacao = document.getElementById('admin-paginacao');
+  clearElement(container);
+  clearElement(paginacao);
+  atualizarTabsFila(filaParams.tipo);
+
+  const query = new URLSearchParams({
+    tipo: filaParams.tipo,
+    q: filaParams.q,
+    offset: String(filaParams.offset),
+    limite: String(filaParams.limite),
+  });
+
+  let resp;
+  try {
+    resp = await api(`/api/comissao/fila?${query.toString()}`);
+  } catch (err) {
+    container.appendChild(el('div', { className: 'card' }, [
+      el('p', { className: 'text-muted' }, err.message || 'Erro ao carregar fila.'),
+    ]));
+    return;
+  }
+
+  if (!resp.submissoes.length) {
+    container.appendChild(el('div', { className: 'card' }, [
+      el('p', { className: 'text-muted' }, 'Nenhum processo encontrado.'),
+    ]));
+    return;
+  }
+
   container.appendChild(
-    el('div', { className: 'card audit-card' }, [
-      el('h3', { id: 'auditoria-titulo' }, 'Histórico de Ações'),
-      el('p', { className: 'text-muted' },
-        'Últimos eventos do registro transacional imutável. Deliberações e ' +
-        'logs são retidos por 6 meses antes do arquivamento.'),
-      el('ul', { className: 'audit-list' }, itens),
+    el('div', { className: 'card table-container' }, [
+      el('table', { className: 'triage-table' }, [
+        el('thead', {}, [
+          el('tr', {}, [
+            el('th', { scope: 'col' }, 'Nome'),
+            el('th', { scope: 'col' }, 'DRE'),
+            el('th', { scope: 'col' }, 'Curso'),
+            el('th', { scope: 'col' }, 'Critérios'),
+            el('th', { scope: 'col' }, 'Status'),
+            el('th', { scope: 'col' }, 'Boletim'),
+            el('th', { scope: 'col' }, 'BOA'),
+            el('th', { scope: 'col' }, 'Ação Rápida'),
+          ]),
+        ]),
+        el('tbody', {}, resp.submissoes.map((s) => renderLinha(s))),
+      ]),
+    ])
+  );
+
+  renderPaginacao(resp.total, paginacao);
+}
+
+function renderLinha(sub) {
+  const { metadata, diagnostico, alertas, excecoes, documentos } = sub;
+  const apto = diagnostico?.apto;
+  const criterios = diagnostico?.criterios || [];
+  const ok = criterios.filter((c) => c.ok).length;
+  const aprovacaoImediata =
+    sub.status === 'fila_regular' && apto && !excecoes?.length && !alertas?.length;
+
+  const acoes = el('td', { className: 'actions-row' });
+  if (aprovacaoImediata) {
+    const btn = el('button', {
+      className: 'btn btn-primary btn-sm', type: 'button', title: 'Deferir em 1 clique',
+    }, 'Deferir');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await api(`/api/comissao/submissoes/${sub.id}/decisao`, {
+          method: 'POST',
+          body: { decisao: 'aprovada' },
+        });
+        await carregarFila();
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+      }
+    });
+    acoes.appendChild(btn);
+  }
+  const btnRevisar = el('button', {
+    className: 'btn btn-secondary btn-sm', type: 'button',
+  }, 'Revisar');
+  btnRevisar.addEventListener('click', () => {
+    abrirMesa(sub.id, () => navegarPara('/admin/mesa'));
+  });
+  acoes.appendChild(btnRevisar);
+
+  const linkDoc = (doc, label) => {
+    if (!doc.disponivel) return el('span', { className: 'text-muted' }, '—');
+    return el('a', {
+      href: doc.url,
+      target: '_blank',
+      rel: 'noopener',
+      className: 'doc-link',
+    }, label);
+  };
+
+  const statusCell = el('td', {}, [
+    aprovacaoImediata
+      ? el('span', { className: 'badge badge-ap' }, 'Aprovação imediata')
+      : el('span', { className: `badge ${apto ? 'badge-cursando' : 'badge-neutro'}` },
+          apto ? 'Apto' : 'Pendências'),
+    excecoes?.length ? el('span', { className: 'badge badge-neutro' }, `${excecoes.length} exceção(ões)`) : null,
+    alertas?.length ? el('span', { className: 'badge badge-reprovado' }, `${alertas.length} alerta(s)`) : null,
+  ]);
+
+  return el('tr', { className: aprovacaoImediata ? 'triage-ok' : '' }, [
+    el('td', {}, [
+      el('strong', {}, metadata?.nome || 'Nome não identificado'),
+      el('br'),
+      el('span', { className: 'text-muted' }, `enviado em ${fmtData(sub.criadoEm)}`),
+    ]),
+    el('td', {}, metadata?.dre || '—'),
+    el('td', {}, metadata?.curso || '—'),
+    el('td', {}, criterios.length ? `${ok}/${criterios.length}` : '—'),
+    statusCell,
+    el('td', {}, linkDoc(documentos?.boletim || {}, 'Boletim')),
+    el('td', {}, linkDoc(documentos?.boa || {}, 'BOA')),
+    acoes,
+  ]);
+}
+
+function renderPaginacao(total, container) {
+  if (total <= filaParams.limite) return;
+  const paginas = Math.ceil(total / filaParams.limite);
+  const atual = Math.floor(filaParams.offset / filaParams.limite);
+
+  const botoes = [];
+  for (let i = 0; i < paginas; i++) {
+    const btn = el('button', {
+      className: `btn btn-sm ${i === atual ? 'btn-primary' : 'btn-secondary'}`,
+      type: 'button',
+    }, String(i + 1));
+    btn.addEventListener('click', () => {
+      filaParams = { ...filaParams, offset: i * filaParams.limite };
+      carregarFila();
+    });
+    botoes.push(btn);
+  }
+
+  container.appendChild(
+    el('div', { className: 'paginacao' }, [
+      el('span', { className: 'text-muted' }, `${total} processo(s)`),
+      ...botoes,
     ])
   );
 }
 
 /* ============================================================
-   Autorizações (liberação + validade)
+   Autorizações
    ============================================================ */
 
-const fmtData = (iso) =>
-  iso ? new Date(iso).toLocaleDateString('pt-BR') : '—';
-
 async function carregarAutorizacoes() {
-  const container = document.getElementById('comissao-autorizacoes');
+  const container = document.getElementById('admin-autorizacoes');
   clearElement(container);
 
   let autorizacoes;
@@ -235,150 +379,25 @@ async function carregarAutorizacoes() {
             }, a.status === 'vigente' ? 'Vigente' : 'Expirada'),
           ]),
           el('td', {},
-            `${fmtData(a.validaAte)}` +
-              (a.status === 'vigente' ? ` (${a.diasParaVencer}d)` : '')),
+            `${fmtData(a.validaAte)}` + (a.status === 'vigente' ? ` (${a.diasParaVencer}d)` : '')),
         ])
       )
-    : [
-        el('tr', {}, [
-          el('td', { colspan: '5', className: 'text-muted' },
-            'Nenhuma autorização emitida.'),
-        ]),
-      ];
-
-  container.appendChild(
-    el('div', { className: 'card audit-card' }, [
-      el('h3', { id: 'autorizacoes-titulo' }, 'Autorizações de Estágio'),
-      el('p', { className: 'text-muted' },
-        'Liberações deferidas pela comissão. Validade: liberação + 90 dias.'),
-      el('div', { className: 'table-container' }, [
-        el('table', { className: 'triage-table' }, [
-          el('thead', {}, [
-            el('tr', {}, [
-              el('th', { scope: 'col' }, 'Data da Liberação'),
-              el('th', { scope: 'col' }, 'Nome do Aluno'),
-              el('th', { scope: 'col' }, 'DRE'),
-              el('th', { scope: 'col' }, 'Status'),
-              el('th', { scope: 'col' }, 'Validade da Autorização'),
-            ]),
-          ]),
-          el('tbody', {}, corpo),
-        ]),
-      ]),
-    ])
-  );
-}
-
-/* ============================================================
-   Fila — tabela de triagem
-   ============================================================ */
-
-export async function carregarFila() {
-  const container = document.getElementById('comissao-fila');
-  clearElement(container);
-
-  const { submissoes } = await api(`/api/comissao/fila?tipo=${filaAtual}`);
-
-  if (!submissoes.length) {
-    container.appendChild(
-      el('div', { className: 'card' }, [
-        el('p', { className: 'text-muted' },
-          filaAtual === 'regular'
-            ? 'Nenhum caso regular aguardando aprovação.'
-            : 'Nenhum caso na Mesa de Revisão.'),
-      ])
-    );
-    return;
-  }
+    : [el('tr', {}, [el('td', { colspan: '5', className: 'text-muted' }, 'Nenhuma autorização emitida.')])];
 
   container.appendChild(
     el('div', { className: 'card table-container' }, [
       el('table', { className: 'triage-table' }, [
         el('thead', {}, [
           el('tr', {}, [
-            el('th', { scope: 'col' }, 'Nome'),
+            el('th', { scope: 'col' }, 'Data da Liberação'),
+            el('th', { scope: 'col' }, 'Nome do Aluno'),
             el('th', { scope: 'col' }, 'DRE'),
-            el('th', { scope: 'col' }, 'Curso'),
-            el('th', { scope: 'col' }, 'Critérios'),
             el('th', { scope: 'col' }, 'Status'),
-            el('th', { scope: 'col' }, 'Ação Rápida'),
+            el('th', { scope: 'col' }, 'Validade'),
           ]),
         ]),
-        el('tbody', {}, submissoes.map(renderLinha)),
+        el('tbody', {}, corpo),
       ]),
     ])
   );
-}
-
-function renderLinha(sub) {
-  const { metadata, diagnostico, alertas, excecoes } = sub;
-  const apto = diagnostico?.apto;
-  const criterios = diagnostico?.criterios || [];
-  const ok = criterios.filter((c) => c.ok).length;
-
-  // Aprovação imediata: 100% apto, sem exceções declaradas nem alertas
-  // de saneamento — o caso regular dispensa conferência manual.
-  const aprovacaoImediata =
-    filaAtual === 'regular' && apto && !excecoes?.length && !alertas?.length;
-
-  const acoes = el('td', { className: 'actions-row' });
-  if (aprovacaoImediata) {
-    const btnDeferir = el('button', {
-      className: 'btn btn-primary btn-sm',
-      type: 'button',
-      title: 'Deferir em 1 clique',
-    }, 'Deferir');
-    btnDeferir.addEventListener('click', async () => {
-      btnDeferir.disabled = true;
-      try {
-        await api(`/api/comissao/submissoes/${sub.id}/decisao`, {
-          method: 'POST',
-          body: { decisao: 'aprovada' },
-        });
-        carregarPainel();
-      } catch (err) {
-        alert(err.message);
-        btnDeferir.disabled = false;
-      }
-    });
-    acoes.appendChild(btnDeferir);
-  }
-
-  const btnRevisar = el('button', {
-    className: 'btn btn-secondary btn-sm',
-    type: 'button',
-  }, 'Revisar');
-  btnRevisar.addEventListener('click', () => abrirMesa(sub.id));
-  acoes.appendChild(btnRevisar);
-
-  const statusCell = el('td', {}, [
-    aprovacaoImediata
-      ? el('span', { className: 'badge badge-ap' }, 'Apto — aprovação imediata')
-      : el('span', {
-          className: `badge ${apto ? 'badge-cursando' : 'badge-neutro'}`,
-        }, apto ? 'Apto' : 'Pendências'),
-    excecoes?.length
-      ? el('span', { className: 'badge badge-neutro' },
-          `${excecoes.length} exceção(ões)`)
-      : null,
-    alertas?.length
-      ? el('span', { className: 'badge badge-reprovado' },
-          `${alertas.length} alerta(s)`)
-      : null,
-  ]);
-
-  return el('tr', { className: aprovacaoImediata ? 'triage-ok' : '' }, [
-    el('td', {}, [
-      el('strong', {}, metadata?.nome || 'Nome não identificado'),
-      el('br'),
-      el('span', { className: 'text-muted' },
-        `enviado em ${fmtData(sub.criadoEm)}`),
-    ]),
-    el('td', {}, metadata?.dre || '—'),
-    el('td', {}, metadata?.curso || '—'),
-    el('td', {},
-      criterios.length ? `${ok}/${criterios.length} critérios` : '—'),
-    statusCell,
-    acoes,
-  ]);
 }

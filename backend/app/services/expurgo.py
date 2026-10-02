@@ -30,24 +30,30 @@ def executar_expurgo(db: Session, settings) -> int:
             Submissao.concluido_em.isnot(None),
             Submissao.concluido_em <= limite,
             Submissao.pdf_expurgado_em.is_(None),
-            Submissao.pdf_path.isnot(None),
+            Submissao.boletim_path.isnot(None),
         )
         .all()
     )
 
     removidos = 0
     for sub in candidatas:
-        path = Path(sub.pdf_path)
-        if path.exists():
-            path.unlink()
+        for attr in ("boletim_path", "boa_path", "pdf_path"):
+            path_str = getattr(sub, attr, None)
+            if path_str:
+                path = Path(path_str)
+                if path.exists():
+                    path.unlink()
         sub.pdf_expurgado_em = datetime.now(timezone.utc)
         registrar(
             db,
             ator=None,
-            acao="expurgo_pdf",
+            acao="expurgo_pdfs",
             entidade="submissao",
             entidade_id=sub.id,
-            payload={"sha256": sub.pdf_sha256},
+            payload={
+                "boletim_sha256": sub.boletim_sha256,
+                "boa_sha256": sub.boa_sha256,
+            },
         )
         removidos += 1
     db.commit()

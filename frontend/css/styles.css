@@ -1396,7 +1396,7 @@ table .btn {
 }
 
 /* ============================================================
-   validador-estagio-ic — login, fila e mesa de revisão
+   validador-estagio-ic ï¿½ login, fila e mesa de revisï¿½o
    ============================================================ */
 
 .login-card {
@@ -1457,7 +1457,7 @@ table .btn {
   align-items: flex-start;
 }
 
-/* Fila da comissão */
+/* Fila da comissï¿½o */
 .fila-list {
   display: flex;
   flex-direction: column;
@@ -1490,7 +1490,7 @@ table .btn {
   flex-wrap: wrap;
 }
 
-/* Mesa de revisão (split-screen) */
+/* Mesa de revisï¿½o (split-screen) */
 .mesa {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1539,7 +1539,7 @@ table .btn {
   font-weight: 400;
 }
 
-/* Exceções do discente */
+/* Exceï¿½ï¿½es do discente */
 .excecao-list {
   list-style: none;
   padding: 0;
@@ -1601,10 +1601,10 @@ table .btn {
 }
 
 /* ============================================================
-   Painel da comissão: segmented control, métricas e auditoria
+   Painel da comissï¿½o: segmented control, mï¿½tricas e auditoria
    ============================================================ */
 
-/* Barra segmentada — pills com contraste em ambos os temas */
+/* Barra segmentada ï¿½ pills com contraste em ambos os temas */
 .app-nav.segmented {
   display: inline-flex;
   gap: 4px;
@@ -1649,7 +1649,7 @@ table .btn {
   color: #0f172a;
 }
 
-/* Badge de contagem de pendências dentro do pill */
+/* Badge de contagem de pendï¿½ncias dentro do pill */
 .seg-badge {
   display: inline-flex;
   align-items: center;
@@ -1670,7 +1670,7 @@ table .btn {
   color: var(--cor-ic1, #344563);
 }
 
-/* Grid de métricas */
+/* Grid de mï¿½tricas */
 .metricas-grid {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   margin-bottom: var(--spacing-md);
@@ -1750,7 +1750,7 @@ table .btn {
   }
 }
 
-/* Cards de métricas interativos */
+/* Cards de mï¿½tricas interativos */
 .metric-card.metric-clicavel {
   cursor: pointer;
   transition: transform .15s, box-shadow .15s, border-color .15s;
@@ -1796,6 +1796,208 @@ table .btn {
 [data-theme="dark"] .seg-chip:hover {
   background: var(--cor-ic1-light, #8fb0e8);
   color: #0f172a;
+}
+
+/* ============================================================
+   ReestruturaÃ§Ã£o: navegaÃ§Ã£o, uploads duplos, espaÃ§amento e contraste
+   ============================================================ */
+
+/* Aumenta o respiro geral */
+.app-main {
+  padding: var(--spacing-xl) var(--spacing-xl);
+}
+
+.card {
+  padding: var(--spacing-xl);
+  margin-bottom: var(--spacing-xl);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0 0 var(--spacing-lg);
+}
+
+p {
+  margin: 0 0 var(--spacing-lg);
+}
+
+/* Header com navegaÃ§Ã£o interna */
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.header-nav .nav-link {
+  color: var(--text-on-dark);
+  opacity: 0.85;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-md);
+  transition: opacity .15s, background-color .15s;
+}
+
+.header-nav .nav-link:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.1);
+  text-decoration: none;
+}
+
+/* Uploads duplos */
+.upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-xl);
+}
+
+@media (max-width: 768px) {
+  .upload-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.upload-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.upload-card h3 {
+  font-size: 1rem;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.upload-badge {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--status-ap-bg);
+  color: var(--status-ap);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Layouts administrativos */
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+  flex-wrap: wrap;
+}
+
+.admin-header h2 {
+  margin: 0;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--spacing-xl);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Fila de triagem */
+.fila-toolbar {
+  margin-bottom: var(--spacing-xl);
+}
+
+.input-busca {
+  width: 100%;
+  max-width: 420px;
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.triage-table {
+  width: 100%;
+}
+
+.triage-table th,
+.triage-table td {
+  padding: var(--spacing-md) var(--spacing-md);
+  border-bottom: 1px solid var(--divider-color);
+}
+
+.triage-table tbody tr.triage-ok {
+  background-color: rgba(22, 163, 74, 0.08);
+}
+
+.triage-table tbody tr.triage-ok:hover {
+  background-color: rgba(22, 163, 74, 0.14);
+}
+
+.triage-table .doc-link {
+  font-weight: 600;
+  color: var(--cor-ic1);
+}
+
+/* PaginaÃ§Ã£o */
+.paginacao {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-xl);
+}
+
+/* Mesa de anÃ¡lise */
+.mesa-pdf-wrap {
+  min-height: 60vh;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+/* Cards de mÃ©tricas com mais respiro */
+.metric-card {
+  padding: var(--spacing-xl);
+}
+
+.metric-value {
+  font-size: 1.75rem;
+}
+
+/* Tabelas e formulÃ¡rios com mais contraste */
+table {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+th {
+  background-color: var(--bg-secondary);
+  border-bottom: 2px solid var(--border-color);
+}
+
+/* Melhora visual do dashboard */
+#admin-metricas .cards-grid {
+  margin-bottom: var(--spacing-xl);
+}
+
+/* Responsividade da navegaÃ§Ã£o */
+@media (max-width: 768px) {
+  .app-header {
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+
+  .header-nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    padding-top: var(--spacing-sm);
+  }
 }
 
 /* ============================================================
