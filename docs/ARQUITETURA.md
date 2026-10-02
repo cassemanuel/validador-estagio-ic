@@ -30,7 +30,8 @@ validador-estagio-ic/
 3. **Saneamento:** backend recalcula elegibilidade com o espelho Python das regras e detecta divergências.
 4. **Triagem:** comissão acessa fila unificada; casos regulares são deferíveis em 1 clique; demais vão para mesa de revisão.
 5. **Decisão:** deferimento, indeferimento ou devolução gera `audit_log` e, se aprovado, autorização com validade de 90 dias.
-6. **Expurgo:** PDFs cifrados são removidos após `PDF_RETENTION_DAYS`; logs são arquivados após 6 meses.
+6. **Arquivamento:** processos concluídos (`indeferida`, `devolvida`, `cancelada`, `revogada`) podem ser arquivados pela comissão (`status = 'arquivada'`), saindo da fila ativa e das métricas de pendentes — evento registrado no `audit_log`.
+7. **Expurgo:** PDFs cifrados são removidos após `PDF_RETENTION_DAYS`; logs são arquivados após 6 meses.
 
 ## 4. Motor de parsing (client-side)
 
@@ -45,7 +46,7 @@ validador-estagio-ic/
 | Camada | Medida |
 |--------|--------|
 | Upload | Magic bytes `%PDF-`, limite 15 MB, content-type restrito. |
-| Path traversal | DRE sanitizado; padrão de nome fixo. |
+| Path traversal | DRE sanitizado; padrão de nome fixo; `spa_fallback` confinado ao diretório `frontend/` via caminho canônico (`resolve()` + `is_relative_to`, 404 para escapes). |
 | PDF bomb | Máximo 25 páginas; worker local. |
 | XSS | Text nodes; URLs sanitizadas. |
 | RBAC | Endpoints `/api/comissao/*` exigem papel `comissao`. |

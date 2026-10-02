@@ -263,6 +263,19 @@ test('extrairResumoBOA: faltante > 0 é somado em creditosFaltantes', () => {
   assert.equal(creditosFaltantes, 4);
 });
 
+test('extrairResumoBOA: humanidades — usa a ocorrência do rótulo com números', () => {
+  const paginas = [[
+    { str: 'Escolha Restrita - Grupo Humanidades', x: 10, y: 150 },
+    { str: '4.0', x: 200, y: 150 },
+    { str: '0.0', x: 260, y: 150 },
+  ]];
+  const { grupos } = extrairResumoBOA(paginas);
+  const r = grupos.find((g) => g.nome === 'escolha restrita');
+  assert.equal(r.exigido, 4);
+  assert.equal(r.faltante, 0);
+  assert.equal(r.cumprido, 4);
+});
+
 test('extrairResumoBOA: rótulo deslocado em Y ainda encontra a linha', () => {
   // Rótulo quebrado em duas linhas: o Y do texto difere do Y dos números.
   const paginas = [[

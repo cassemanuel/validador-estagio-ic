@@ -480,9 +480,9 @@ const CREDITOS_EXIGIDOS = {
 
 export function extrairResumoBOA(paginas) {
   const nomes = [
-    ['escolha condicionada', /escolha\s*condicionada/i],
-    ['livre escolha', /livre\s*escolha/i],
-    ['escolha restrita', /escolha\s*restrita|humanidades/i],
+    ['escolha condicionada', /escolha\s+condicionada/i],
+    ['livre escolha', /livre\s+escolha/i],
+    ['escolha restrita', /escolha\s+restrita|humanidades/i],
   ];
 
   const grupos = [];
@@ -493,21 +493,25 @@ export function extrairResumoBOA(paginas) {
       if (grupos.find((g) => g.nome === nomePadrao)) continue;
 
       const exigido = CREDITOS_EXIGIDOS[nomePadrao];
-      const labelItem = items.find((it) => regex.test(normalize(it.str)));
-      if (!labelItem) continue;
+      const rotulos = items.filter((it) => regex.test(normalize(it.str)));
+      if (!rotulos.length) continue;
 
-      // Números à direita do rótulo, plausíveis como créditos do grupo —
-      // valores acima do teto (ex.: "320" horas de Extensão) são ignorados.
-      const numericos = items
-        .filter((it) => it.x > labelItem.x)
-        .map((it) => ({ x: it.x, y: it.y, n: parseFloat(it.str) }))
-        .filter((o) => !Number.isNaN(o.n) && o.n >= 0 && o.n <= exigido);
-
-      // A linha do grupo é a faixa de Y mais próxima do rótulo: tolera
-      // rótulos quebrados em duas linhas ou com Y deslocado das células.
-      // Na tabela de resumo, "Falta Cumprir" é a última coluna (maior X).
+      // O rótulo do grupo pode aparecer mais de uma vez na página (legenda,
+      // quadro de disciplinas, resumo). Só a ocorrência da tabela de resumo
+      // tem números à direita — avalia-se cada uma e prefere-se a que tem.
       let faltante = exigido;
-      if (numericos.length) {
+      for (const labelItem of rotulos) {
+        // Números à direita do rótulo, plausíveis como créditos do grupo —
+        // valores acima do teto (ex.: "320" horas de Extensão) são ignorados.
+        const numericos = items
+          .filter((it) => it.x > labelItem.x)
+          .map((it) => ({ x: it.x, y: it.y, n: parseFloat(it.str) }))
+          .filter((o) => !Number.isNaN(o.n) && o.n >= 0 && o.n <= exigido);
+        if (!numericos.length) continue;
+
+        // A linha do grupo é a faixa de Y mais próxima do rótulo: tolera
+        // rótulos quebrados em duas linhas ou com Y deslocado das células.
+        // Na tabela de resumo, "Falta Cumprir" é a última coluna (maior X).
         const dyMin = Math.min(
           ...numericos.map((o) => Math.abs(o.y - labelItem.y))
         );
@@ -517,6 +521,7 @@ export function extrairResumoBOA(paginas) {
           )
           .sort((a, b) => a.x - b.x);
         faltante = linha[linha.length - 1].n;
+        break;
       }
       const cumprido = Math.max(0, exigido - faltante);
 

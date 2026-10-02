@@ -39,6 +39,8 @@ Este documento reúne as melhorias planejadas e as contingências documentadas p
 
 ## 5. Dashboards e relatórios avançados
 
+- **Status do módulo de Relatórios de Estágio:** em construção — placeholder
+  navegável em `/admin/relatorios`, previsto para o ciclo **2027/1**.
 - Exportação CSV/JSONL da fila, autorizações e auditoria.
 - Métricas de tempo médio de análise e taxa de deferimento por semestre.
 - Painel de evolução histórica do CR agregado (anonimizado).

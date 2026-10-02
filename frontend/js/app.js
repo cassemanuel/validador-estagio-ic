@@ -109,6 +109,7 @@ const VIEWS = [
   'view-admin-fila',
   'view-admin-mesa',
   'view-admin-autorizacoes',
+  'view-admin-relatorios',
 ];
 
 function mostrarView(id) {
@@ -161,6 +162,7 @@ async function mostrarApp(user, pushState = true) {
       const view = caminho === '/admin/fila' ? 'view-admin-fila'
         : caminho === '/admin/mesa' ? 'view-admin-mesa'
         : caminho === '/admin/autorizacoes' ? 'view-admin-autorizacoes'
+        : caminho === '/admin/relatorios' ? 'view-admin-relatorios'
         : 'view-admin-dashboard';
       mostrarView(view);
       await initPainel(view);
@@ -216,6 +218,7 @@ async function aplicarRota(caminho) {
       const view = pathname === '/admin/fila' ? 'view-admin-fila'
         : pathname === '/admin/mesa' ? 'view-admin-mesa'
         : pathname === '/admin/autorizacoes' ? 'view-admin-autorizacoes'
+        : pathname === '/admin/relatorios' ? 'view-admin-relatorios'
         : 'view-admin-dashboard';
       mostrarView(view);
       await initPainel(view);

@@ -48,15 +48,18 @@ A triagem automática (`services/triagem.py`) encaminha o processo para:
 
 ### Comissão / Admin
 
-O painel administrativo possui **4 telas dedicadas**:
+O painel administrativo possui **5 telas dedicadas**:
 
-1. **`/admin/dashboard`** — métricas consolidadas, alertas de vencimento e
-   auditoria recente.
+1. **`/admin/dashboard`** — métricas consolidadas em cards clicáveis, alertas
+   de vencimento e auditoria recente.
 2. **`/admin/fila`** — tabela unificada de triagem com busca por nome/DRE,
-   filtro “todos/regulares/revisão” e paginação.
+   filtro por status (incluindo **Arquivadas**) e paginação.
 3. **`/admin/mesa`** — análise individual do processo, com abas para alternar
-   entre Boletim e BOA, exceções declaradas e evolução do CR.
+   entre Boletim e BOA, exceções declaradas, evolução do CR, deliberação e
+   **arquivamento** de processos concluídos.
 4. **`/admin/autorizacoes`** — liberações deferidas e validade de 90 dias.
+5. **`/admin/relatorios`** — módulo de acompanhamento de relatórios de estágio
+   (em construção, previsto para o ciclo 2027/1).
 
 ## Segurança, LGPD e governança
 
@@ -68,6 +71,10 @@ O painel administrativo possui **4 telas dedicadas**:
 - **Path traversal**: DRE e identificadores são sanitizados antes de compor os
   nomes dos arquivos no disco (`boletim_{dre}_{timestamp}.pdf` /
   `boa_{dre}_{timestamp}.pdf`).
+- **SPA fallback confinado**: o `spa_fallback` resolve o caminho canônico e só
+  serve arquivos contidos em `frontend/` (`resolve()` + `is_relative_to`);
+  tentativas de escape como `..%2f` retornam HTTP 404 — coberto por testes em
+  `backend/tests/test_seguranca.py`.
 - **PDF.js hardening**: `isEvalSupported: false` no `getDocument`, worker local
   vendored e limite máximo de páginas processadas por documento.
 - **Sanitização de DOM**: helpers de renderização usam `createTextNode` e
@@ -175,6 +182,8 @@ cd .. && npm test
 | GET    | `/api/comissao/submissoes/{id}/boletim` | comissão | Stream do Boletim (auditado) |
 | GET    | `/api/comissao/submissoes/{id}/boa` | comissão | Stream do BOA (auditado) |
 | POST   | `/api/comissao/submissoes/{id}/decisao` | comissão | Deliberação transacional |
+| POST   | `/api/comissao/submissoes/{id}/revogar` | comissão | Revogação de autorização |
+| POST   | `/api/comissao/submissoes/{id}/arquivar` | comissão | Arquivamento de processo concluído |
 
 ## Licença
 

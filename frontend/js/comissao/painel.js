@@ -74,7 +74,25 @@ export async function carregarPainel(viewAtual) {
   if (viewAtual === 'view-admin-dashboard') {
     await Promise.all([carregarMetricas(), carregarAuditoriaDashboard()]);
   }
-  if (viewAtual === 'view-admin-fila') await carregarFila();
+  if (viewAtual === 'view-admin-fila') {
+    // Parâmetros de rota (ex.: /admin/fila?status=indeferida, ?tipo=revisao)
+    // vindos dos cards do dashboard ou de links externos.
+    const params = new URLSearchParams(window.location.search);
+    const tipo = params.get('tipo');
+    const status = params.get('status')?.toLowerCase();
+    if (tipo || status) {
+      filaParams = {
+        ...filaParams,
+        tipo: tipo || (status === 'fila_regular' ? 'regular'
+          : status === 'mesa_revisao' ? 'revisao' : 'todos'),
+        status: status || STATUS_POR_TIPO[tipo] || 'todos',
+        offset: 0,
+      };
+      const statusSelect = document.getElementById('fila-status');
+      if (statusSelect) statusSelect.value = filaParams.status;
+    }
+    await carregarFila();
+  }
   if (viewAtual === 'view-admin-mesa') {
     const mesa = document.getElementById('admin-mesa');
     const params = new URLSearchParams(window.location.search);
@@ -125,13 +143,23 @@ async function carregarMetricas() {
       label: 'Solicitações recebidas',
       valor: `${m.total || 0}`,
       detalhe: `no semestre ${m.semestre || ''}: ${m.total_semestre || 0}`,
+      onClick: () => navegarPara('/admin/fila?status=todos'),
     },
-    { label: 'Deferidos', valor: `${m.deferidos || 0}` },
-    { label: 'Indeferidos', valor: `${m.indeferidos || 0}` },
+    {
+      label: 'Deferidos',
+      valor: `${m.deferidos || 0}`,
+      onClick: () => navegarPara('/admin/autorizacoes'),
+    },
+    {
+      label: 'Indeferidos',
+      valor: `${m.indeferidos || 0}`,
+      onClick: () => navegarPara('/admin/fila?status=indeferida'),
+    },
     {
       label: 'Pendentes',
       valor: `${m.pendentes || 0}`,
-      onClick: () => navegarPara('/admin/fila'),
+      valorCls: 'metric-value-destaque',
+      onClick: () => navegarPara('/admin/fila?tipo=revisao'),
       detalheNode: el('p', { className: 'text-muted metric-det' }, [
         chipFila('regular', 'regular', m.fila_regular || 0), ' ',
         chipFila('revisao', 'mesa', m.mesa_revisao || 0),
@@ -148,6 +176,7 @@ async function carregarMetricas() {
       label: 'Relatórios de estágio',
       valor: `${(m.relatorios && m.relatorios.entregues) || 0} entregues`,
       detalhe: `${(m.relatorios && m.relatorios.pendentes) || 0} pendentes no semestre`,
+      onClick: () => navegarPara('/admin/relatorios'),
     },
   ];
 
@@ -163,7 +192,7 @@ async function carregarMetricas() {
         }
         const card = el('div', attrs, [
           el('span', { className: 'cr-detail-label' }, c.label),
-          el('p', { className: 'metric-value' }, c.valor),
+          el('p', { className: `metric-value ${c.valorCls || ''}` }, c.valor),
           c.detalheNode ||
             (c.detalhe ? el('p', { className: 'text-muted metric-det' }, c.detalhe) : null),
         ]);
