@@ -61,7 +61,7 @@ class Settings(BaseSettings):
 
     # LGPD / expurgo
     pdf_retention_days: int = 30
-    audit_retention_days: int = 183  # ~6 meses antes do arquivamento
+    audit_retention_days: int = 365  # 1 ano antes do arquivamento
     archive_dir: str = "./data/archive"
     purge_interval_seconds: int = 3600
     max_pdf_size: int = 15 * 1024 * 1024  # 15 MB por arquivo PDF

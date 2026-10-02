@@ -12,7 +12,7 @@ import { el, clearElement, formatNumberBR } from '../ui/dom.js';
 import { navegarPara } from '../router.js';
 import { abrirMesa } from './mesa.js';
 
-let filaParams = { tipo: 'todos', status: 'abertos', q: '', offset: 0, limite: 25 };
+let filaParams = { tipo: 'todos', status: 'todos', q: '', offset: 0, limite: 25 };
 let filaCarregando = false;
 
 const ACAO_LABEL = {
@@ -171,18 +171,33 @@ async function carregarAuditoriaDashboard() {
    Fila de Triagem (tabela unificada, busca, paginação)
    ============================================================ */
 
+const STATUS_POR_TIPO = {
+  regular: 'fila_regular',
+  revisao: 'mesa_revisao',
+  todos: 'todos',
+};
+
 function initFilaTabs() {
   document.querySelectorAll('#view-admin-fila .tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      filaParams = { ...filaParams, tipo: btn.dataset.fila, offset: 0 };
-      atualizarTabsFila(btn.dataset.fila);
+      const tipo = btn.dataset.fila;
+      const status = STATUS_POR_TIPO[tipo] || 'todos';
+      filaParams = { ...filaParams, tipo, status, offset: 0 };
+      const statusSelect = document.getElementById('fila-status');
+      if (statusSelect) statusSelect.value = status;
+      atualizarTabsFila(tipo);
       carregarFila();
     });
   });
   const statusSelect = document.getElementById('fila-status');
   if (statusSelect) {
     statusSelect.addEventListener('change', () => {
-      filaParams = { ...filaParams, status: statusSelect.value, offset: 0 };
+      const status = statusSelect.value;
+      const tipo = status === 'fila_regular' ? 'regular'
+        : status === 'mesa_revisao' ? 'revisao'
+        : 'todos';
+      filaParams = { ...filaParams, tipo, status, offset: 0 };
+      atualizarTabsFila(tipo);
       carregarFila();
     });
   }
@@ -258,6 +273,7 @@ export async function carregarFila() {
             el('th', { scope: 'col' }, 'DRE'),
             el('th', { scope: 'col' }, 'Curso'),
             el('th', { scope: 'col' }, 'Critérios'),
+            el('th', { scope: 'col' }, 'Situação'),
             el('th', { scope: 'col' }, 'Status'),
             el('th', { scope: 'col' }, 'Boletim'),
             el('th', { scope: 'col' }, 'BOA'),
@@ -310,7 +326,7 @@ function renderLinha(sub) {
   acoes.appendChild(btnRevisar);
 
   const linkDoc = (doc, label) => {
-    if (!doc.disponivel) return el('span', { className: 'text-muted' }, '—');
+    if (!doc?.disponivel) return el('span', { className: 'text-muted' }, '—');
     return el('a', {
       href: doc.url,
       target: '_blank',
@@ -318,6 +334,27 @@ function renderLinha(sub) {
       className: 'doc-link',
     }, label);
   };
+
+  const situacaoLabel = {
+    fila_regular: 'Na Fila',
+    mesa_revisao: 'Em Revisão',
+    aprovada: 'Aprovado',
+    indeferida: 'Indeferido',
+    devolvida: 'Devolvido',
+    cancelada: 'Cancelado',
+  };
+  const situacaoClass = {
+    fila_regular: 'badge-cursando',
+    mesa_revisao: 'badge-alerta',
+    aprovada: 'badge-ap',
+    indeferida: 'badge-reprovado',
+    devolvida: 'badge-reprovado',
+    cancelada: 'badge-neutro',
+  };
+  const situacaoCell = el('td', {}, [
+    el('span', { className: `badge ${situacaoClass[sub.status] || 'badge-neutro'}` },
+      situacaoLabel[sub.status] || sub.status),
+  ]);
 
   const statusCell = el('td', {}, [
     aprovacaoImediata
@@ -337,6 +374,7 @@ function renderLinha(sub) {
     el('td', {}, metadata?.dre || '—'),
     el('td', {}, metadata?.curso || '—'),
     el('td', {}, criterios.length ? `${ok}/${criterios.length}` : '—'),
+    situacaoCell,
     statusCell,
     el('td', {}, linkDoc(documentos?.boletim || {}, 'Boletim')),
     el('td', {}, linkDoc(documentos?.boa || {}, 'BOA')),

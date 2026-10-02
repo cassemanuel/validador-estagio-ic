@@ -101,13 +101,31 @@ function renderLadoPdf(sub) {
 
   renderAba(abaAtiva());
 
+  const docAtivo = () => (abaAtiva() === 'boa' ? docs.boa : docs.boletim) || {};
+
+  const btnAbrir = el('button', {
+    className: 'btn btn-secondary btn-sm', type: 'button', disabled: !docAtivo().disponivel,
+  }, 'Abrir PDF em nova guia');
+  btnAbrir.addEventListener('click', () => {
+    const url = docAtivo().url;
+    if (url) window.open(url, '_blank', 'noopener');
+  });
+
+  const wrap = el('div', { className: 'mesa-pdf-wrap' });
+  wrap.appendChild(conteudo.firstChild ? conteudo : conteudo); // conteudo é o container
+  const btnExpandir = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Expandir visualizador');
+  btnExpandir.addEventListener('click', () => {
+    const expandir = !wrap.classList.toggle('mesa-pdf-fullscreen');
+    btnExpandir.textContent = expandir ? 'Expandir visualizador' : 'Restaurar visualizador';
+  });
+
   const sha256 = docs.boletim?.sha256 || sub.pdfSha256;
   return el('div', { className: 'mesa-col' }, [
     el('h3', {}, 'Documentos originais'),
     sha256 ? el('p', { className: 'text-muted mesa-hash' },
       `sha256 boletim: ${sha256.slice(0, 24)}…`) : null,
-    tabs,
-    conteudo,
+    el('div', { className: 'actions-row mesa-pdf-actions' }, [tabs, btnAbrir, btnExpandir]),
+    wrap,
   ]);
 }
 
@@ -116,9 +134,34 @@ function useState(initial) {
   return [() => value, (v) => { value = v; }];
 }
 
+function estimarPeriodo(ingresso) {
+  const m = String(ingresso || '').match(/(\d{4})\/(\d)/);
+  if (!m) return null;
+  const anoIngresso = Number(m[1]);
+  const semIngresso = Number(m[2]);
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const semAtual = hoje.getMonth() < 6 ? 1 : 2;
+  const periodos = (anoAtual - anoIngresso) * 2 + (semAtual - semIngresso) + 1;
+  return periodos > 0 ? periodos : 1;
+}
+
+function contarCursos(metadata) {
+  const text = String(metadata?.curso || '');
+  const matches = text.match(/\d{4,5}\s*-/g) || [];
+  const cursos = new Set(matches.map((m) => m.replace(/\s*-/, '').trim()));
+  return cursos.size;
+}
+
 function renderLadoDados(sub) {
   const col = el('div', { className: 'mesa-col' }, [el('h3', {}, 'Dados extraídos')]);
   const { metadata, diagnostico, alertas, periodos } = sub;
+
+  const periodoEstimado = estimarPeriodo(metadata?.ingresso);
+  const qtdCursos = contarCursos(metadata);
+  const cursoInfo = qtdCursos === 1
+    ? '1 curso'
+    : `${qtdCursos} cursos${qtdCursos > 1 ? ' — Transferência interna' : ''}`;
 
   col.appendChild(
     el('div', { className: 'card' },
@@ -126,7 +169,10 @@ function renderLadoDados(sub) {
         ['Nome', metadata?.nome],
         ['DRE', metadata?.dre],
         ['Curso', metadata?.curso],
+        ['Cursos detectados', cursoInfo],
         ['Ingresso', metadata?.ingresso],
+        ['Período estimado', periodoEstimado ? `${periodoEstimado}º período` : null],
+        ['Data de emissão', metadata?.emissao || metadata?.emissaoBoa],
         ['Documento', sub.tipoDocumento],
       ]
         .filter(([, v]) => v)
@@ -297,6 +343,22 @@ function renderDeliberacao(sub) {
     }
   };
 
+  const respostasRapidas = [
+    { label: 'Falta integralizar ciclo básico', texto: 'Discente ainda não integralizou todo o ciclo básico obrigatório do PPC 2022.' },
+    { label: 'CR abaixo do mínimo regulamentar (6.0)', texto: 'Coeficiente de Rendimento abaixo do mínimo de 6,0 exigido para estágio.' },
+    { label: 'Deferido', texto: 'Caso regular: discente atende todos os requisitos de elegibilidade.' },
+    { label: 'Aprovado c/ ressalva', texto: 'Aprovado, desde que o discente conclua a disciplina pendente no período em curso: ' },
+  ];
+
+  const btnResposta = (r) => {
+    const btn = el('button', { className: 'btn btn-text btn-sm btn-resposta-rapida', type: 'button' }, r.label);
+    btn.addEventListener('click', () => {
+      motivo.value = r.texto;
+      motivo.focus();
+    });
+    return btn;
+  };
+
   const botoes = el('div', { className: 'actions-row' }, []);
   const criarBotao = (label, classe, decisao) => {
     const btn = el('button', { className: `btn ${classe}`, type: 'button' }, label);
@@ -309,6 +371,10 @@ function renderDeliberacao(sub) {
 
   return el('div', { className: 'card' }, [
     el('h4', {}, 'Deliberação'),
+    el('div', { className: 'respostas-rapidas' }, [
+      el('span', { className: 'text-muted' }, 'Respostas rápidas:'),
+      ...respostasRapidas.map(btnResposta),
+    ]),
     motivo,
     erro,
     botoes,

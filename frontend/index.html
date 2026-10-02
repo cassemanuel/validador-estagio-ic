@@ -217,17 +217,14 @@
       <nav class="app-nav segmented" aria-label="Filas da comissão">
         <button class="tab-btn active" data-fila="todos" type="button" aria-pressed="true">
           Todos
-          <span class="seg-badge badge-neutro" id="badge-todos" hidden></span>
         </button>
         <button class="tab-btn" data-fila="regular" type="button" aria-pressed="false">
           <i class="bi bi-lightning-charge" aria-hidden="true"></i>
           Regulares
-          <span class="seg-badge badge-ap" id="badge-regular" hidden></span>
         </button>
         <button class="tab-btn" data-fila="revisao" type="button" aria-pressed="false">
           <i class="bi bi-layout-split" aria-hidden="true"></i>
           Revisão
-          <span class="seg-badge badge-alerta" id="badge-revisao" hidden></span>
         </button>
       </nav>
 
@@ -235,12 +232,13 @@
         <input type="search" id="fila-busca" class="input-busca" placeholder="Buscar por nome ou DRE..." />
         <label class="fila-status-label" for="fila-status">Status:</label>
         <select id="fila-status" class="input-busca">
-          <option value="abertos">Em análise</option>
+          <option value="todos" selected>Todas</option>
+          <option value="fila_regular">Em análise</option>
+          <option value="mesa_revisao">Em revisão</option>
           <option value="aprovada">Aprovadas</option>
           <option value="indeferida">Indeferidas</option>
           <option value="devolvida">Devolvidas</option>
           <option value="cancelada">Canceladas</option>
-          <option value="todos">Todas</option>
         </select>
       </div>
 
@@ -250,10 +248,6 @@
 
     <!-- ===== Admin: Mesa de Análise Individual ===== -->
     <section id="view-admin-mesa" class="tab-panel" hidden>
-      <div class="admin-header">
-        <h2>Mesa de Análise</h2>
-        <a href="/admin/fila" data-spa class="btn btn-secondary btn-sm">&larr; Voltar à fila</a>
-      </div>
       <div id="admin-mesa"></div>
     </section>
 

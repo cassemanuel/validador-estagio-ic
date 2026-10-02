@@ -534,9 +534,7 @@ export function renderSvgCrEvolution(periodos, crAcumuladoTotal) {
   ref.setAttribute('y1', y(6));
   ref.setAttribute('x2', width - margin.right);
   ref.setAttribute('y2', y(6));
-  ref.setAttribute('stroke', 'var(--status-reprovado)');
-  ref.setAttribute('stroke-dasharray', '4 4');
-  ref.setAttribute('stroke-width', '2');
+  ref.setAttribute('class', 'chart-ref-line');
   svg.appendChild(ref);
 
   // labels eixo X
@@ -608,19 +606,6 @@ function renderStatus(container, sub) {
   clearElement(container);
   const concluida = !STATUS_ATIVOS.includes(sub.status);
 
-  const btnNova = concluida
-    ? el('button', { className: 'btn btn-primary', type: 'button' },
-        'Nova Submissão / Reenviar Documentação')
-    : null;
-  if (btnNova) {
-    btnNova.addEventListener('click', () => {
-      const fluxo = document.getElementById('discente-fluxo');
-      fluxo.hidden = false;
-      resetUploadState();
-      document.getElementById('upload-boletim-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  }
-
   const btnCancelar = !concluida
     ? el('button', { className: 'btn btn-danger', type: 'button' }, 'Cancelar Solicitação')
     : null;
@@ -669,7 +654,6 @@ function renderStatus(container, sub) {
       sub.alertas?.length && !concluida
         ? el('p', { className: 'text-muted' }, 'Seu caso está na Mesa de Revisão para conferência detalhada.')
         : null,
-      btnNova,
       btnCancelar,
     ])
   );
@@ -899,7 +883,19 @@ function disciplinaAprovada(d) {
   return sit === 'AP' || sit === 'T' || sit === 'A' || sit === 'NCC' || sit === 'NCG';
 }
 
+function getCodigosCicloBasico() {
+  const regras = state.regras || {};
+  const codigos = new Set();
+  (regras.ciclo_basico || []).forEach((r) => {
+    codigos.add(String(r.codigo || '').trim().toUpperCase());
+    (r.aceitos || []).forEach((a) => codigos.add(String(a || '').trim().toUpperCase()));
+    (r.aceitos_conjunto || []).flat().forEach((a) => codigos.add(String(a || '').trim().toUpperCase()));
+  });
+  return codigos;
+}
+
 function getOptativasCursadas(pendencias) {
+  const obrigatorias = getCodigosCicloBasico();
   const catalogo = new Set(
     (pendencias.optativas || [])
       .map((o) => String(o.codigo || '').trim().toUpperCase())
@@ -907,22 +903,31 @@ function getOptativasCursadas(pendencias) {
   );
   const vistos = new Set();
   const resultado = [];
-  const adicionar = (codigo, nome) => {
+  const adicionar = (codigo, nome, detalhes = {}) => {
     const c = String(codigo || '').trim().toUpperCase();
-    if (!c || !catalogo.has(c) || vistos.has(c)) return;
+    if (!c || vistos.has(c) || obrigatorias.has(c)) return;
+    // Aceita se está no catálogo de optativas do BOA OU já tem nota/conceito (aprovada).
+    const noCatalogo = catalogo.has(c);
+    const temNota = detalhes.grau != null || detalhes.situacao;
+    if (!noCatalogo && !temNota) return;
     vistos.add(c);
-    resultado.push({ codigo: c, nome: nome || c });
+    resultado.push({
+      codigo: c,
+      nome: nome || c,
+      grau: detalhes.grau != null ? formatNumberBR(detalhes.grau, 1) : null,
+      situacao: detalhes.situacao || 'AP',
+    });
   };
 
-  // Boletim: disciplinas aprovadas.
+  // Boletim: disciplinas aprovadas que não fazem parte do ciclo básico.
   (state.boletim?.historico?.periodos || []).forEach((p) => {
     (p.disciplinas || []).forEach((d) => {
-      if (disciplinaAprovada(d)) adicionar(d.codigo, d.nome);
+      if (disciplinaAprovada(d)) adicionar(d.codigo, d.nome, d);
     });
   });
   // BOA: aprovadas/cumpridos da zona superior.
-  (state.boa?.dados?.aprovadas || []).forEach((d) => adicionar(d.codigo, d.nome));
-  (state.boa?.dados?.cumpridos || []).forEach((d) => adicionar(d, d));
+  (state.boa?.dados?.aprovadas || []).forEach((d) => adicionar(d.codigo, d.nome, d));
+  (state.boa?.dados?.cumpridos || []).forEach((d) => adicionar(d, d, {}));
 
   return resultado;
 }
@@ -938,7 +943,8 @@ function renderPendencias(pendencias) {
   for (let i = 1; i <= totalSlots; i += 1) {
     const d = cursadas[i - 1];
     if (d) {
-      slots.push(el('li', { className: 'slot-preenchido' }, `${i}. ${d.codigo} - ${d.nome}`));
+      const nota = d.grau ? ` (${d.situacao} ${d.grau})` : '';
+      slots.push(el('li', { className: 'slot-preenchido' }, `${i}. ${d.codigo} - ${d.nome}${nota}`));
     } else {
       slots.push(el('li', { className: 'slot-vago' },
         `Slot ${i}: Pendente (Faltam ${faltam} eletiva${faltam === 1 ? '' : 's'} para integralizar)`));
