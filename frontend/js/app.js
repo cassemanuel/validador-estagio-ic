@@ -21,14 +21,33 @@ function init() {
   initLogin();
   initDevLogin();
   initLogout();
+  initSobreModal();
   initNavegacaoSPA();
   bootstrapSessao();
+}
+
+function initSobreModal() {
+  const modal = document.getElementById('modal-sobre');
+  const btn = document.getElementById('btn-sobre');
+  const fechar = document.getElementById('modal-sobre-fechar');
+  const ok = document.getElementById('modal-sobre-ok');
+  if (!modal) return;
+  const abrir = () => modal.showModal();
+  const fecharFn = () => modal.close();
+  btn?.addEventListener('click', abrir);
+  fechar?.addEventListener('click', fecharFn);
+  ok?.addEventListener('click', fecharFn);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) fecharFn();
+  });
 }
 
 function configurePdfWorker() {
   if (globalThis.pdfjsLib) {
     globalThis.pdfjsLib.GlobalWorkerOptions.workerSrc =
       'vendor/pdfjs/pdf.worker.min.js';
+    // Desativa a execução de JavaScript embutido em PDFs (hardening).
+    globalThis.pdfjsLib.disableAutoFetch = true;
   } else {
     console.warn('pdf.js não carregado. O upload de PDF não funcionará.');
   }
@@ -104,6 +123,11 @@ async function mostrarApp(user, pushState = true) {
 
   const headerNav = document.getElementById('header-nav');
   if (headerNav) headerNav.hidden = user.papel !== 'comissao';
+
+  const homeLink = document.getElementById('header-home-link');
+  if (homeLink) {
+    homeLink.href = user.papel === 'comissao' ? '/admin/dashboard' : '/aluno';
+  }
 
   const caminho = rotaAtual();
   if (user.papel === 'comissao') {

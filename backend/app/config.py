@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     audit_retention_days: int = 183  # ~6 meses antes do arquivamento
     archive_dir: str = "./data/archive"
     purge_interval_seconds: int = 3600
-    max_pdf_size: int = 10 * 1024 * 1024
+    max_pdf_size: int = 15 * 1024 * 1024  # 15 MB por arquivo PDF
 
     # Autorização de estágio: validade após a liberação (dias)
     autorizacao_validade_dias: int = 90

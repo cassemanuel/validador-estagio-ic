@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -72,6 +73,9 @@ def _serializar(sub: Submissao, decisao=None) -> dict:
     return resultado
 
 
+PDF_MAGIC = b"%PDF-"
+
+
 def _validar_pdf(upload: UploadFile | None, nome: str) -> bytes:
     if not upload or not (upload.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, f"Envie o PDF do {nome}.")
@@ -83,8 +87,21 @@ def _validar_pdf(upload: UploadFile | None, nome: str) -> bytes:
         raise HTTPException(400, f"O arquivo {nome} deve ser um PDF válido.")
     dados = upload.file.read()
     if len(dados) > settings.max_pdf_size:
-        raise HTTPException(400, f"Arquivo {nome} muito grande (máx. 10 MB).")
+        raise HTTPException(
+            413,
+            f"Arquivo {nome} excede o limite de "
+            f"{settings.max_pdf_size // (1024 * 1024)} MB.",
+        )
+    if not dados.startswith(PDF_MAGIC):
+        raise HTTPException(400, f"O arquivo {nome} não é um PDF válido.")
     return dados
+
+
+def _sanitizar_dre(dre: str | None) -> str:
+    """Remove qualquer caractere que possa gerar path traversal ou nomes estranhos."""
+    if not dre:
+        return "sem_dre"
+    return re.sub(r"[^A-Za-z0-9]+", "_", str(dre))[:32]
 
 
 def _salvar_pdf(
@@ -162,7 +179,7 @@ def criar_submissao(
     upload_dir = Path(settings.upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    dre = str(body.metadata.get("dre") or user.username or str(user.id))
+    dre = _sanitizar_dre(body.metadata.get("dre") or user.username or str(user.id))
 
     boletim.file.seek(0)
     boa.file.seek(0)

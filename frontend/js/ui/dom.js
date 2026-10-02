@@ -2,18 +2,35 @@
  * Helpers e renderização de componentes da interface.
  */
 
-const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_PDF_SIZE = 15 * 1024 * 1024; // 15 MB
+const PDF_MAGIC = '%PDF-';
 
 /**
- * Valida um arquivo de upload de PDF (extensão/MIME e tamanho máximo).
+ * Valida um arquivo de upload de PDF (magic bytes, extensão/MIME e tamanho).
  * Lança Error com mensagem amigável quando inválido.
  * @param {File} file
- * @returns {void}
+ * @returns {Promise<void>}
  */
-export function validatePdfFile(file) {
+export async function validatePdfFile(file) {
   const isPdf = /\.pdf$/i.test(file?.name || '') || file?.type === 'application/pdf';
   if (!isPdf) throw new Error('Envie um arquivo PDF válido (.pdf).');
-  if (file.size > MAX_PDF_SIZE) throw new Error('Arquivo muito grande (máx. 10 MB).');
+  if (file.size > MAX_PDF_SIZE) throw new Error('Arquivo muito grande (máx. 15 MB).');
+
+  // Verifica magic bytes assíncronamente (FileReader) — fail-fast contra
+  // arquivos com extensão trocada.
+  const header = await readFileSlice(file, 0, PDF_MAGIC.length);
+  if (header !== PDF_MAGIC) {
+    throw new Error('O arquivo não parece ser um PDF válido.');
+  }
+}
+
+function readFileSlice(file, start, end) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new TextDecoder().decode(reader.result));
+    reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+    reader.readAsArrayBuffer(file.slice(start, end));
+  });
 }
 
 /**

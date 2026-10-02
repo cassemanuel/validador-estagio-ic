@@ -23,13 +23,13 @@
 </head>
 <body>
   <header class="app-header">
-    <div class="header-brand">
+    <a href="/" id="header-home-link" class="header-brand" data-spa title="Página inicial">
       <i class="bi bi-mortarboard-fill" aria-hidden="true"></i>
       <div>
         <h1>Validador de Estágio</h1>
         <span>Comissão de Estágio — IC / UFRJ</span>
       </div>
-    </div>
+    </a>
     <nav class="header-nav" id="header-nav" hidden>
       <a href="/admin/dashboard" data-spa class="nav-link">Dashboard</a>
       <a href="/admin/fila" data-spa class="nav-link">Fila</a>
@@ -254,10 +254,48 @@
 
   <footer class="app-footer">
     <p>
-      Sistema institucional da Comissão de Estágio do IC/UFRJ. Dados tratados
-      conforme a LGPD.
+      <strong>Validador de Estágio — IC/UFRJ</strong> ·
+      Iniciativa desenvolvida por discentes do Instituto de Computação (IC/UFRJ)
+      voltada para o próprio IC/UFRJ, com o objetivo de dar agilidade e
+      transparência à validação dos estágios curriculares do BCC (PPC 2022).
     </p>
+    <button type="button" id="btn-sobre" class="btn btn-text btn-sm">Sobre o projeto</button>
   </footer>
+
+  <!-- Modal "Sobre o Projeto" -->
+  <dialog id="modal-sobre" class="modal">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2>Sobre o Validador de Estágio</h2>
+        <button type="button" id="modal-sobre-fechar" class="btn-icon" aria-label="Fechar">
+          <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+      </header>
+      <div class="modal-body">
+        <p>
+          O <strong>Validador de Estágio</strong> é uma plataforma cliente-servidor
+          desenvolvida por discentes do <strong>Instituto de Computação (IC/UFRJ)</strong>
+          voltada para o próprio IC/UFRJ.
+        </p>
+        <p>
+          Seu objetivo é dar <strong>agilidade e transparência</strong> à validação
+          dos estágios curriculares do <strong>Bacharelado em Ciência da Computação (BCC)</strong>,
+          sob o <strong>PPC 2022</strong>, integrando a extração local dos documentos
+          SIGA (Boletim Não Oficial + BOA) à análise da Comissão de Estágio.
+        </p>
+        <h3>Segurança e Governança</h3>
+        <ul>
+          <li>PDFs são processados no navegador e só enviados ao servidor após confirmação.</li>
+          <li>Os arquivos brutos são expurgados após a conclusão do processo, conforme política de retenção.</li>
+          <li>Todas as ações são registradas em log transacional imutável com hash chain.</li>
+          <li>Dados tratados conforme a LGPD.</li>
+        </ul>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" id="modal-sobre-ok" class="btn btn-primary">Entendi</button>
+      </footer>
+    </div>
+  </dialog>
 
   <script type="module" src="js/app.js"></script>
 </body>

@@ -41,7 +41,7 @@ export async function carregarPainel(viewAtual) {
   if (viewAtual === 'view-admin-fila') await carregarFila();
   if (viewAtual === 'view-admin-mesa') {
     const mesa = document.getElementById('admin-mesa');
-    if (!mesa.innerHTML.trim()) {
+    if (!mesa.firstChild) {
       clearElement(mesa);
       mesa.appendChild(el('div', { className: 'card' }, [
         el('p', { className: 'text-muted' }, 'Selecione um processo na Fila para abrir a mesa de análise.'),

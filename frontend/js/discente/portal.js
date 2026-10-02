@@ -123,7 +123,7 @@ async function handleUpload(tipo, file, { progress, progressBar }) {
   if (progressBar) progressBar.style.width = '0%';
 
   try {
-    validatePdfFile(file);
+    await validatePdfFile(file);
     const buffer = await file.arrayBuffer();
 
     if (tipo === 'boletim') {
