@@ -190,6 +190,7 @@ export function parseMetadata(lines) {
     nome: null,
     dre: null,
     curso: null,
+    cursos: [], // todos os cursos detectados (transferência interna)
     ingresso: null,
     emissao: null,
     tipoDocumento: null,
@@ -254,10 +255,17 @@ function extrairMetadadosDaLinha(line, nextLine, metadata) {
 
   // Curso: em transferências, o primeiro cabeçalho pode ser o curso antigo
   // (ex: BCMT) e um cabeçalho posterior o curso atual (BCC). Por isso,
-  // sempre sobrescrevemos com a última ocorrência válida.
-  const cursoMatch = line.match(/(\d{4,5}\s*-\s*[A-Za-zÁ-Úá-ú\s]+?)(?=\s*Reconhecimento|\s*Portaria|\s*Unidade|\s*Turno|$)/i);
+  // sempre sobrescrevemos com a última ocorrência válida e acumulamos
+  // todos os cursos distintos em metadata.cursos.
+  const cursoMatch = line.match(/(\d{4,6}\s*-\s*[A-Za-zÁ-Úá-ú\s]+?)(?=\s*Reconhecimento|\s*Portaria|\s*Unidade|\s*Turno|$)/i);
   if (cursoMatch) {
-    metadata.curso = cursoMatch[1].trim().replace(/\s+Curso$/i, '');
+    const curso = cursoMatch[1].trim().replace(/\s+Curso$/i, '');
+    const codigo = curso.match(/^\d{4,6}/)?.[0];
+    const jaVisto = metadata.cursos.some(
+      (c) => c.match(/^\d{4,6}/)?.[0] === codigo
+    );
+    if (codigo && !jaVisto) metadata.cursos.push(curso);
+    metadata.curso = curso;
     return;
   }
 

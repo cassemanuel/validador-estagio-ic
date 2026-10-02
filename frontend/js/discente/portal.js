@@ -290,6 +290,17 @@ function mergeAndDiagnose() {
       historico.metadata[campo] = boa.metadata[campo];
     }
   }
+  // Cursos detectados: união dos códigos do Boletim e do BOA
+  // (transferência interna pode aparecer em qualquer documento).
+  const cursos = new Map();
+  for (const c of [
+    ...(historico.metadata.cursos || []),
+    ...(boa.metadata?.cursos || []),
+  ]) {
+    const cod = String(c).match(/\d{4,6}/)?.[0];
+    if (cod && !cursos.has(cod)) cursos.set(cod, String(c));
+  }
+  historico.metadata.cursos = [...cursos.values()];
   if (!historico.metadata.tipoDocumento) {
     historico.metadata.tipoDocumento = 'boa';
   }
@@ -320,6 +331,18 @@ function normalizarNome(nome) {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
+}
+
+function descricaoCursos(cursos) {
+  const codigos = new Set(
+    (cursos || [])
+      .map((c) => String(c).match(/\d{4,6}/)?.[0])
+      .filter(Boolean)
+  );
+  if (!codigos.size) return null;
+  return codigos.size > 1
+    ? `${codigos.size} cursos (Transferência interna)`
+    : '1 curso';
 }
 
 function parseDataBR(str) {
@@ -368,6 +391,7 @@ function renderRevisao(container) {
         ['Nome', metadata.nome],
         ['DRE', metadata.dre],
         ['Curso', metadata.curso],
+        ['Cursos detectados', descricaoCursos(metadata.cursos)],
         ['Ingresso', metadata.ingresso],
         ['Documento', metadata.tipoDocumento],
       ]

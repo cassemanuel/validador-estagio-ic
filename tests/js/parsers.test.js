@@ -15,6 +15,7 @@ import {
 } from '../../frontend/js/parsers/pdfParser.js';
 import {
   extrairMetadataBOA,
+  extrairResumoBOA,
   parsePaginaBOA,
 } from '../../frontend/js/parsers/boaParser.js';
 import { calcularCRAcumulado } from '../../frontend/js/domain/cr.js';
@@ -191,6 +192,87 @@ test('parseMetadata mantém o último curso do cabeçalho (transferência BCMT -
   ];
   const { curso } = parseMetadata(lines);
   assert.equal(curso, '85783 - Ciência da Computação');
+});
+
+test('parseMetadata acumula todos os cursos detectados (multi-curso)', () => {
+  const lines = [
+    '116844 - Bacharelado em Ciência e Tecnologia',
+    'JOSE BORGES',
+    '85783 - Ciência da Computação',
+    '85783 - Ciência da Computação', // repetição não duplica
+  ];
+  const { curso, cursos } = parseMetadata(lines);
+  assert.equal(curso, '85783 - Ciência da Computação');
+  assert.equal(cursos.length, 2);
+  assert.ok(cursos[0].startsWith('116844'));
+  assert.ok(cursos[1].startsWith('85783'));
+});
+
+test('extrairMetadataBOA acumula cursos distintos no cabeçalho', () => {
+  const items = [
+    { str: 'Aluno', x: 113, y: 22 },
+    { str: 'JOAO VICTOR BORGES', x: 123, y: 22 },
+    { str: 'Matrícula', x: 113, y: 362 },
+    { str: '120154812', x: 123, y: 362 },
+    { str: '116844 - Bacharelado em Ciência e Tecnologia', x: 90, y: 517 },
+    { str: '85783 - Ciência da Computação', x: 90, y: 540 },
+  ];
+  const meta = extrairMetadataBOA(items);
+  assert.equal(meta.cursos.length, 2);
+});
+
+// Resumo do BOA real: a coluna "Falta Cumprir" é o último número da linha.
+// Valores de C.H. (ex.: 320 horas de Extensão) não são créditos e devem
+// ser ignorados pelo teto de créditos do grupo.
+test('extrairResumoBOA: faltantes zerados implicam eletivas concluídas', () => {
+  const paginas = [[
+    { str: 'Escolha condicionada', x: 10, y: 100 },
+    { str: '32.0', x: 200, y: 100 },
+    { str: '320', x: 230, y: 100 }, // C.H. de extensão — fora do teto
+    { str: '0.0', x: 260, y: 100 },
+    { str: 'Escolha Restrita - Grupo Humanidades', x: 10, y: 150 },
+    { str: '4.0', x: 200, y: 150 },
+    { str: '0.0', x: 260, y: 150 },
+    { str: 'Livre escolha', x: 10, y: 200 },
+    { str: '10.0', x: 200, y: 200 },
+    { str: '0.0', x: 260, y: 200 },
+  ]];
+
+  const { grupos, creditosFaltantes } = extrairResumoBOA(paginas);
+  assert.equal(grupos.length, 3);
+  assert.equal(creditosFaltantes, 0);
+  const cond = grupos.find((g) => g.nome === 'escolha condicionada');
+  assert.deepEqual(
+    { exigido: cond.exigido, cumprido: cond.cumprido, faltante: cond.faltante },
+    { exigido: 32, cumprido: 32, faltante: 0 }
+  );
+  const livre = grupos.find((g) => g.nome === 'livre escolha');
+  assert.deepEqual(
+    { exigido: livre.exigido, cumprido: livre.cumprido, faltante: livre.faltante },
+    { exigido: 8, cumprido: 8, faltante: 0 }
+  );
+});
+
+test('extrairResumoBOA: faltante > 0 é somado em creditosFaltantes', () => {
+  const paginas = [[
+    { str: 'Livre escolha', x: 10, y: 200 },
+    { str: '4.0', x: 200, y: 200 },
+    { str: '4.0', x: 260, y: 200 }, // faltante = último número da linha
+  ]];
+  const { creditosFaltantes } = extrairResumoBOA(paginas);
+  assert.equal(creditosFaltantes, 4);
+});
+
+test('extrairResumoBOA: rótulo deslocado em Y ainda encontra a linha', () => {
+  // Rótulo quebrado em duas linhas: o Y do texto difere do Y dos números.
+  const paginas = [[
+    { str: 'Escolha condicionada', x: 10, y: 90 },
+    { str: '32.0', x: 200, y: 100 },
+    { str: '0.0', x: 260, y: 100 },
+  ]];
+  const { grupos } = extrairResumoBOA(paginas);
+  const cond = grupos.find((g) => g.nome === 'escolha condicionada');
+  assert.equal(cond.faltante, 0);
 });
 
 test('coluna BOA concluída sem status de pendência gera cumprido', () => {

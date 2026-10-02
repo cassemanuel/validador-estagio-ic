@@ -43,6 +43,7 @@ def init_db() -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
     models.Base.metadata.create_all(engine)
+    _migrar_check_arquivada()
 
     # Provisiona usuários seed (SEED_USERS) e membros da comissão.
     with Session(engine) as db:
@@ -67,6 +68,37 @@ def init_db() -> None:
                 user.papel = "comissao"
 
         db.commit()
+
+
+def _migrar_check_arquivada() -> None:
+    """Reconstrói `submissoes` quando o CHECK de status não contempla
+    'arquivada' — o SQLite não permite ALTER em CHECK constraints."""
+    from sqlalchemy.schema import CreateTable
+
+    from .models import Submissao
+
+    raw = engine.raw_connection()
+    try:
+        cur = raw.cursor()
+        ddl_atual = cur.execute(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type='table' AND name='submissoes'"
+        ).fetchone()
+        if not ddl_atual or "'arquivada'" in (ddl_atual[0] or ""):
+            return
+        ddl_novo = str(CreateTable(Submissao.__table__).compile(engine))
+        ddl_novo = ddl_novo.replace(
+            "CREATE TABLE submissoes", "CREATE TABLE submissoes_nova"
+        )
+        cur.execute("PRAGMA foreign_keys=OFF")
+        cur.execute(ddl_novo)
+        cur.execute("INSERT INTO submissoes_nova SELECT * FROM submissoes")
+        cur.execute("DROP TABLE submissoes")
+        cur.execute("ALTER TABLE submissoes_nova RENAME TO submissoes")
+        cur.execute("PRAGMA foreign_keys=ON")
+        raw.commit()
+    finally:
+        raw.close()
 
 
 def _parse_seed_users(raw: str):

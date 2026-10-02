@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from .auditoria import registrar
 from ..models import Submissao
 
-STATUS_CONCLUIDOS = ("aprovada", "indeferida", "devolvida")
+STATUS_CONCLUIDOS = ("aprovada", "indeferida", "devolvida", "arquivada")
 
 
 def executar_expurgo(db: Session, settings) -> int:

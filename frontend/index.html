@@ -81,12 +81,24 @@
           </label>
           <label>
             Senha
-            <input
-              type="password"
-              id="login-senha"
-              autocomplete="current-password"
-              required
-            />
+            <span class="senha-wrap">
+              <input
+                type="password"
+                id="login-senha"
+                autocomplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                id="toggle-senha"
+                class="senha-toggle"
+                aria-label="Mostrar senha"
+                aria-pressed="false"
+                title="Mostrar senha"
+              >
+                <i class="bi bi-eye" aria-hidden="true"></i>
+              </button>
+            </span>
           </label>
           <p id="login-erro" class="login-erro" role="alert" hidden></p>
           <button type="submit" class="btn btn-primary">Entrar</button>
@@ -240,7 +252,10 @@
           <option value="mesa_revisao">Em Revisão</option>
           <option value="aprovada">Aprovadas</option>
           <option value="indeferida">Indeferidas</option>
+          <option value="devolvida">Devolvidas</option>
           <option value="cancelada">Canceladas</option>
+          <option value="revogada">Revogadas</option>
+          <option value="arquivada">Arquivadas</option>
         </select>
       </div>
 
@@ -276,6 +291,13 @@
       voltada para o próprio IC/UFRJ, com o objetivo de dar agilidade e
       transparência à validação dos estágios curriculares do BCC (PPC 2022).
       <span class="footer-note">Motor de parsing calibrado com base no layout SIGA/UFRJ de set/2026.</span>
+    </p>
+    <p class="footer-links">
+      <a href="https://ic.ufrj.br/info/normas-estagio-bcc/" target="_blank" rel="noopener noreferrer">Normas de Estágio BCC</a>
+      ·
+      <a href="https://ic.ufrj.br/info/estrutura-administrativa/" target="_blank" rel="noopener noreferrer">Comissão e Coordenação</a>
+      ·
+      <a href="https://ic.ufrj.br/info/sobre-o-bcc/" target="_blank" rel="noopener noreferrer">Página do Curso BCC</a>
     </p>
     <div class="footer-actions">
       <button type="button" id="btn-sobre" class="btn btn-text btn-sm">Sobre o projeto</button>

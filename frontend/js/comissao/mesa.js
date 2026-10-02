@@ -97,6 +97,7 @@ function renderLadoPdf(sub, docInicial = 'boletim') {
         b.setAttribute('aria-pressed', String(ativo));
       });
       renderAba(nome);
+      btnAbrir.disabled = !docAtivo().disponivel;
     });
     tabs.appendChild(btn);
   });
@@ -109,8 +110,10 @@ function renderLadoPdf(sub, docInicial = 'boletim') {
     className: 'btn btn-secondary btn-sm', type: 'button', disabled: !docAtivo().disponivel,
   }, 'Abrir PDF em nova guia');
   btnAbrir.addEventListener('click', () => {
-    const url = docAtivo().url;
-    if (url) window.open(url, '_blank', 'noopener');
+    const docAtual = abaAtiva();
+    if (docAtivo().disponivel) {
+      window.open(`/api/comissao/submissoes/${sub.id}/${docAtual}`, '_blank');
+    }
   });
 
   const wrap = el('div', { className: 'mesa-pdf-wrap' });
@@ -168,10 +171,15 @@ function estimarPeriodo(ingresso) {
 }
 
 function contarCursos(metadata) {
-  const text = String(metadata?.curso || '');
-  const matches = text.match(/\d{4,5}\s*-/g) || [];
-  const cursos = new Set(matches.map((m) => m.replace(/\s*-/, '').trim()));
-  return cursos.size;
+  const codigos = new Set();
+  (metadata?.cursos || []).forEach((c) => {
+    const cod = String(c).match(/\d{4,6}/)?.[0];
+    if (cod) codigos.add(cod);
+  });
+  // Fallback para submissões antigas sem metadata.cursos
+  (String(metadata?.curso || '').match(/\d{4,6}\s*-/g) || []).forEach((m) =>
+    codigos.add(m.replace(/\s*-/, '').trim()));
+  return codigos.size;
 }
 
 function renderLadoDados(sub) {
@@ -182,9 +190,9 @@ function renderLadoDados(sub) {
 
   const periodoEstimado = estimarPeriodo(metadata?.ingresso);
   const qtdCursos = contarCursos(metadata);
-  const cursoInfo = qtdCursos === 1
-    ? '1 curso'
-    : `${qtdCursos} cursos${qtdCursos > 1 ? ' — Transferência interna' : ''}`;
+  const cursoInfo = qtdCursos > 1
+    ? `${qtdCursos} cursos (Transferência interna)`
+    : '1 curso';
 
   col.appendChild(
     el('div', { className: 'card' },
@@ -394,6 +402,11 @@ function renderDeliberacao(sub) {
     btn.addEventListener('click', () => decidir(decisao));
     return btn;
   };
+
+  const STATUS_ABERTOS = ['fila_regular', 'mesa_revisao'];
+  const STATUS_ARQUIVAVEIS = ['indeferida', 'devolvida', 'cancelada', 'revogada'];
+  const emAnalise = STATUS_ABERTOS.includes(sub.status);
+
   if (sub.status === 'aprovada') {
     const btnRevogar = el('button', { className: 'btn btn-danger', type: 'button' }, 'Revogar Autorização');
     btnRevogar.addEventListener('click', async () => {
@@ -411,19 +424,36 @@ function renderDeliberacao(sub) {
       }
     });
     botoes.appendChild(btnRevogar);
-  } else {
+  } else if (emAnalise) {
     botoes.appendChild(criarBotao('Aprovar', 'btn-primary', 'aprovada'));
     botoes.appendChild(criarBotao('Indeferir', 'btn-danger', 'indeferida'));
     botoes.appendChild(criarBotao('Devolver', 'btn-secondary', 'devolvida'));
+  } else if (STATUS_ARQUIVAVEIS.includes(sub.status)) {
+    const btnArquivar = el('button', { className: 'btn btn-secondary', type: 'button' }, 'Arquivar Processo');
+    btnArquivar.addEventListener('click', async () => {
+      if (!window.confirm('Arquivar este processo? Ele sairá da fila ativa e das contagens do dashboard.')) return;
+      try {
+        await api(`/api/comissao/submissoes/${sub.id}/arquivar`, { method: 'POST' });
+        navegarPara('/admin/fila');
+      } catch (err) {
+        erro.textContent = err.message;
+        erro.hidden = false;
+      }
+    });
+    botoes.appendChild(el('p', { className: 'text-muted' },
+      'Processo concluído. O arquivamento o remove da fila ativa e das métricas.'));
+    botoes.appendChild(btnArquivar);
+  } else {
+    botoes.appendChild(el('p', { className: 'text-muted' }, 'Processo arquivado.'));
   }
 
   return el('div', { className: 'card' }, [
     el('h4', {}, 'Deliberação'),
-    el('div', { className: 'respostas-rapidas' }, [
+    emAnalise ? el('div', { className: 'respostas-rapidas' }, [
       el('span', { className: 'text-muted' }, 'Respostas rápidas:'),
       ...respostasRapidas.map(btnResposta),
-    ]),
-    motivo,
+    ]) : null,
+    emAnalise ? motivo : null,
     erro,
     botoes,
   ]);

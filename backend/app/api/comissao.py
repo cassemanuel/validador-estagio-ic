@@ -85,7 +85,7 @@ def _obter_submissao(db: Session, sub_id: int) -> Submissao:
 @router.get("/fila")
 def fila(
     tipo: str = Query("todos", pattern="^(regular|revisao|todos)$"),
-    status: str = Query("abertos", pattern="^(abertos|todos|fila_regular|mesa_revisao|aprovada|indeferida|devolvida|cancelada)$"),
+    status: str = Query("abertos", pattern="^(abertos|todos|fila_regular|mesa_revisao|aprovada|indeferida|devolvida|cancelada|arquivada)$"),
     q: str = Query("", max_length=100),
     offset: int = Query(0, ge=0),
     limite: int = Query(50, ge=1, le=200),
@@ -307,6 +307,40 @@ def decidir(
         "submissao",
         sub.id,
         {"decisao": body.decisao, "motivo": body.motivo},
+    )
+    db.commit()
+    return {"ok": True, "status": sub.status}
+
+
+STATUS_ARQUIVAVEIS = ("indeferida", "devolvida", "cancelada", "revogada")
+
+
+@router.post("/submissoes/{sub_id}/arquivar")
+def arquivar(
+    sub_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_comissao),
+):
+    """Arquiva um processo concluído, tirando-o da fila ativa.
+
+    Aprovadas não são arquiváveis: a autorização de estágio (e sua
+    validade) depende do status 'aprovada'. Para encerrar uma aprovada,
+    revogue-a antes.
+    """
+    sub = _obter_submissao(db, sub_id)
+    if sub.status in STATUS_ABERTOS:
+        raise HTTPException(409, "Submissão ainda está em análise.")
+    if sub.status == "aprovada":
+        raise HTTPException(
+            409,
+            "Processo aprovado possui autorização vigente — revogue antes de arquivar.",
+        )
+    if sub.status not in STATUS_ARQUIVAVEIS:
+        raise HTTPException(409, "Submissão já está arquivada.")
+
+    sub.status = "arquivada"
+    registrar(
+        db, user, "processo_arquivado", "submissao", sub.id
     )
     db.commit()
     return {"ok": True, "status": sub.status}

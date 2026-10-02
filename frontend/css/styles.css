@@ -153,7 +153,8 @@ a:hover {
 }
 
 /* ----- Utilitários ----- */
-.hidden {
+.hidden,
+[hidden] {
   display: none !important;
 }
 
@@ -1139,6 +1140,23 @@ table .btn {
   margin: 0;
 }
 
+.footer-links {
+  margin-top: var(--spacing-sm) !important;
+}
+
+.footer-links a {
+  color: var(--cor-ic1);
+  text-decoration: none;
+}
+
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
+[data-theme="dark"] .footer-links a {
+  color: var(--cor-ic1-light);
+}
+
 /* ----- Responsividade ----- */
 @media (max-width: 768px) {
   .app-header {
@@ -1438,7 +1456,6 @@ table .btn {
   font-size: 0.9rem;
 }
 
-.login-form input,
 .excecao-form input,
 .excecao-form select,
 .excecao-form textarea,
@@ -1453,6 +1470,50 @@ table .btn {
   resize: vertical;
   font-family: inherit;
   font-size: 0.95rem;
+}
+
+.login-form input {
+  height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.senha-wrap {
+  position: relative;
+  display: block;
+}
+
+.senha-wrap input {
+  padding-right: 44px;
+}
+
+.senha-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.senha-toggle:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover, rgba(0, 0, 0, 0.05));
 }
 
 .login-erro {

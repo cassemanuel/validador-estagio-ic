@@ -201,7 +201,7 @@ function agruparPorColuna(items) {
  * @returns {{nome: string|null, dre: string|null, curso: string|null}}
  */
 export function extrairMetadataBOA(items) {
-  const meta = { nome: null, dre: null, curso: null, emissao: null };
+  const meta = { nome: null, dre: null, curso: null, cursos: [], emissao: null };
   if (!items?.length) return meta;
 
   for (const it of items) {
@@ -218,9 +218,14 @@ export function extrairMetadataBOA(items) {
       const m = s.match(/(?:dre|matr[íi]cula|registro)\s*[:\-–]?\s*(\d{9,10})/i);
       if (m) meta.dre = m[1];
     }
-    if (!meta.curso) {
-      const m = s.match(/(\d{4,5}\s*-\s*[A-Za-zÁ-ú\s]+)/);
-      if (m) meta.curso = m[1].trim();
+    const mCurso = s.match(/(\d{4,6}\s*-\s*[A-Za-zÁ-ú\s]+)/);
+    if (mCurso) {
+      const curso = mCurso[1].trim();
+      const codigo = curso.match(/^\d{4,6}/)?.[0];
+      if (codigo && !meta.cursos.some((c) => c.match(/^\d{4,6}/)?.[0] === codigo)) {
+        meta.cursos.push(curso);
+      }
+      if (!meta.curso) meta.curso = curso;
     }
     if (!meta.emissao) {
       const m = s.match(/(\d{2}\/\d{2}\/\d{4})/);
@@ -491,23 +496,28 @@ export function extrairResumoBOA(paginas) {
       const labelItem = items.find((it) => regex.test(normalize(it.str)));
       if (!labelItem) continue;
 
-      // Lê apenas números na MESMA linha do rótulo (mesmo Y) e à direita dele,
-      // descartando valores acima do teto de créditos do grupo (horas de
-      // extensão como "320" não são créditos). A coluna "Falta Cumprir" é a
-      // mais à direita da tabela de resumo.
-      const candidatos = items
-        .filter(
-          (it) =>
-            it.x > labelItem.x &&
-            Math.abs(it.y - labelItem.y) <= TOLERANCIA_LINHA
-        )
-        .sort((a, b) => a.x - b.x)
-        .map((it) => parseFloat(it.str))
-        .filter((n) => !Number.isNaN(n) && n >= 0 && n <= exigido);
+      // Números à direita do rótulo, plausíveis como créditos do grupo —
+      // valores acima do teto (ex.: "320" horas de Extensão) são ignorados.
+      const numericos = items
+        .filter((it) => it.x > labelItem.x)
+        .map((it) => ({ x: it.x, y: it.y, n: parseFloat(it.str) }))
+        .filter((o) => !Number.isNaN(o.n) && o.n >= 0 && o.n <= exigido);
 
-      const faltante = candidatos.length
-        ? candidatos[candidatos.length - 1]
-        : exigido;
+      // A linha do grupo é a faixa de Y mais próxima do rótulo: tolera
+      // rótulos quebrados em duas linhas ou com Y deslocado das células.
+      // Na tabela de resumo, "Falta Cumprir" é a última coluna (maior X).
+      let faltante = exigido;
+      if (numericos.length) {
+        const dyMin = Math.min(
+          ...numericos.map((o) => Math.abs(o.y - labelItem.y))
+        );
+        const linha = numericos
+          .filter(
+            (o) => Math.abs(o.y - labelItem.y) <= dyMin + TOLERANCIA_LINHA
+          )
+          .sort((a, b) => a.x - b.x);
+        faltante = linha[linha.length - 1].n;
+      }
       const cumprido = Math.max(0, exigido - faltante);
 
       grupos.push({ nome: nomePadrao, exigido, cumprido, faltante });

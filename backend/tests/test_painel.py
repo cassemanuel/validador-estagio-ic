@@ -148,6 +148,53 @@ def test_filtro_por_ano_metricas_e_autorizacoes(client):
     assert auts_vazio["autorizacoes"] == []
 
 
+def test_arquivamento_de_processo_concluido(client):
+    """Arquivar remove o processo da fila ativa e das métricas de pendentes."""
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+
+    login(client, "comissao1", "comissao123")
+
+    # Não arquiva processo ainda em análise
+    resp = client.post(f"/api/comissao/submissoes/{sub['id']}/arquivar")
+    assert resp.status_code == 409
+
+    # Conclui (indefere) e arquiva
+    client.post(
+        f"/api/comissao/submissoes/{sub['id']}/decisao",
+        json={"decisao": "indeferida", "motivo": "Documento ilegível."},
+    )
+    resp = client.post(f"/api/comissao/submissoes/{sub['id']}/arquivar")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "arquivada"
+
+    # Idempotência proibida: já arquivado → 409
+    assert client.post(
+        f"/api/comissao/submissoes/{sub['id']}/arquivar"
+    ).status_code == 409
+
+    # Não aparece em "Aguardando Análise" nem nas contagens ativas
+    fila_aberta = client.get("/api/comissao/fila?status=abertos").json()
+    assert all(s["id"] != sub["id"] for s in fila_aberta["submissoes"])
+
+    fila_arq = client.get("/api/comissao/fila?status=arquivada").json()
+    assert [s["id"] for s in fila_arq["submissoes"]] == [sub["id"]]
+
+    m = client.get("/api/comissao/metricas").json()
+    assert m["pendentes"] == 0
+    assert m["arquivadas"] == 1
+
+    # Evento registrado no audit_log
+    eventos = client.get("/api/comissao/auditoria?limite=20").json()["eventos"]
+    assert "processo_arquivado" in {e["acao"] for e in eventos}
+
+    # Discente não pode arquivar
+    login(client, "aluno1", "aluno123")
+    assert client.post(
+        f"/api/comissao/submissoes/{sub['id']}/arquivar"
+    ).status_code == 403
+
+
 def test_autorizacoes_validade_90_dias(client):
     """Deferimento gera autorização com validade = liberação + 90 dias."""
     from datetime import datetime

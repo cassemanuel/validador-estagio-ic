@@ -239,6 +239,21 @@ async function aplicarRota(caminho) {
 function initLogin() {
   const form = document.getElementById('login-form');
   const erro = document.getElementById('login-erro');
+
+  const senha = document.getElementById('login-senha');
+  const toggle = document.getElementById('toggle-senha');
+  toggle?.addEventListener('click', () => {
+    const mostrar = senha.type === 'password';
+    senha.type = mostrar ? 'text' : 'password';
+    toggle.setAttribute('aria-pressed', String(mostrar));
+    toggle.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
+    toggle.title = mostrar ? 'Ocultar senha' : 'Mostrar senha';
+    toggle.querySelector('i')?.classList.replace(
+      mostrar ? 'bi-eye' : 'bi-eye-slash',
+      mostrar ? 'bi-eye-slash' : 'bi-eye'
+    );
+  });
+
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
     erro.hidden = true;

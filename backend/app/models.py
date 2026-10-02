@@ -43,6 +43,9 @@ STATUS_SUBMISSAO = (
     "aprovada",
     "indeferida",
     "devolvida",
+    "cancelada",
+    "revogada",
+    "arquivada",
 )
 
 
@@ -80,7 +83,7 @@ class Submissao(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('fila_regular','mesa_revisao','aprovada','indeferida','devolvida','cancelada','revogada')",
+            "status IN ('fila_regular','mesa_revisao','aprovada','indeferida','devolvida','cancelada','revogada','arquivada')",
             name="ck_submissao_status",
         ),
     )

@@ -41,7 +41,7 @@ def calcular_metricas(db: Session, settings, ano: int | None = None) -> dict:
 
     por_status = {}
     for status in ("fila_regular", "mesa_revisao", "aprovada",
-                   "indeferida", "devolvida"):
+                   "indeferida", "devolvida", "arquivada"):
         por_status[status] = sum(1 for x in subs if x.status == status)
 
     total_semestre = sum(
@@ -78,6 +78,7 @@ def calcular_metricas(db: Session, settings, ano: int | None = None) -> dict:
         "pendentes": pendentes,
         "fila_regular": por_status["fila_regular"],
         "mesa_revisao": por_status["mesa_revisao"],
+        "arquivadas": por_status["arquivada"],
         "autorizacoes_vencendo": vencendo,
         "autorizacoes_vigentes": len(aprovadas)
         - sum(

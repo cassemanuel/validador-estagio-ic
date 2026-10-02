@@ -26,6 +26,7 @@ const ACAO_LABEL = {
   decisao: 'Deliberação',
   expurgo_pdfs: 'Expurgo de PDFs',
   arquivamento: 'Arquivamento de logs',
+  processo_arquivado: 'Processo arquivado',
 };
 
 const fmtData = (iso) =>
@@ -315,7 +316,6 @@ export async function carregarFila() {
             el('th', { scope: 'col' }, 'Status'),
             el('th', { scope: 'col' }, 'Boletim'),
             el('th', { scope: 'col' }, 'BOA'),
-            el('th', { scope: 'col' }, 'Ação Rápida'),
           ]),
         ]),
         el('tbody', {}, resp.submissoes.map((s) => renderLinha(s))),
@@ -335,34 +335,6 @@ function renderLinha(sub) {
   const aprovacaoImediata =
     sub.status === 'fila_regular' && apto && !excecoes?.length && !alertas?.length;
 
-  const acoes = el('td', { className: 'actions-row' });
-  if (aprovacaoImediata) {
-    const btn = el('button', {
-      className: 'btn btn-primary btn-sm', type: 'button', title: 'Deferir em 1 clique',
-    }, 'Deferir');
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      try {
-        await api(`/api/comissao/submissoes/${sub.id}/decisao`, {
-          method: 'POST',
-          body: { decisao: 'aprovada' },
-        });
-        await carregarFila();
-      } catch (err) {
-        alert(err.message);
-        btn.disabled = false;
-      }
-    });
-    acoes.appendChild(btn);
-  }
-  const btnRevisar = el('button', {
-    className: 'btn btn-secondary btn-sm', type: 'button',
-  }, 'Revisar');
-  btnRevisar.addEventListener('click', () => {
-    navegarPara(`/admin/mesa?id=${sub.id}`);
-  });
-  acoes.appendChild(btnRevisar);
-
   const linkDoc = (tipo, label) => {
     const btn = el('button', {
       className: 'btn btn-secondary btn-sm doc-link',
@@ -379,6 +351,9 @@ function renderLinha(sub) {
     aprovada: 'Aprovado',
     indeferida: 'Indeferido',
     cancelada: 'Cancelado',
+    revogada: 'Revogado',
+    devolvida: 'Devolvido',
+    arquivada: 'Arquivado',
   };
   const statusClass = {
     fila_regular: 'badge-cursando',
@@ -386,6 +361,9 @@ function renderLinha(sub) {
     aprovada: 'badge-ap',
     indeferida: 'badge-reprovado',
     cancelada: 'badge-neutro',
+    revogada: 'badge-neutro',
+    devolvida: 'badge-neutro',
+    arquivada: 'badge-neutro',
   };
   const statusCell = el('td', {}, [
     el('span', { className: `badge ${statusClass[sub.status] || 'badge-neutro'}` },
@@ -407,7 +385,6 @@ function renderLinha(sub) {
     statusCell,
     el('td', {}, linkDoc('boletim', 'Ver Boletim')),
     el('td', {}, linkDoc('boa', 'Ver BOA')),
-    acoes,
   ]);
 }
 
