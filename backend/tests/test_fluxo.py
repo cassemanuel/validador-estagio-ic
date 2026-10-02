@@ -235,3 +235,31 @@ def test_cancelamento_submissao_pelo_discente(client):
             .count()
             == 1
         )
+
+
+def test_minhas_submissoes_com_e_sem_decisao(client):
+    login(client, "aluno1", "aluno123")
+    sub1 = submeter(client).json()
+
+    login(client, "comissao1", "comissao123")
+    client.post(
+        f"/api/comissao/submissoes/{sub1['id']}/decisao",
+        json={"decisao": "aprovada", "motivo": "Apto", "excecoes": []},
+    )
+
+    login(client, "aluno1", "aluno123")
+    sub2 = submeter(client).json()
+
+    resp = client.get("/api/submissoes/minhas")
+    assert resp.status_code == 200
+    subs = resp.json()["submissoes"]
+    assert len(subs) == 2
+    ids = {s["id"] for s in subs}
+    assert ids == {sub1["id"], sub2["id"]}
+
+    sub1_resp = next(s for s in subs if s["id"] == sub1["id"])
+    sub2_resp = next(s for s in subs if s["id"] == sub2["id"])
+    assert sub1_resp["status"] == "aprovada"
+    assert sub1_resp["decisao"]["decisao"] == "aprovada"
+    assert sub2_resp["status"] == "fila_regular"
+    assert sub2_resp["decisao"] is None

@@ -136,7 +136,9 @@ function normalizarTexto(str) {
 }
 
 async function extrairTextoPaginas(pdfData, maxPaginas = 2) {
-  const pdf = await pdfjsLib.getDocument({ data: pdfData, isEvalSupported: false, useSystemFonts: true }).promise;
+  // Usa cópia independente para não transferir/detach o buffer original.
+  const dados = new Uint8Array(pdfData.slice ? pdfData.slice(0) : pdfData);
+  const pdf = await pdfjsLib.getDocument({ data: dados, isEvalSupported: false, useSystemFonts: true }).promise;
   const partes = [];
   for (let i = 1; i <= Math.min(maxPaginas, pdf.numPages); i += 1) {
     const page = await pdf.getPage(i);
@@ -163,15 +165,24 @@ async function validarTipoPDF(tipo, buffer) {
   }
 }
 
+function limparErroUpload(revisao, analise) {
+  clearElement(revisao);
+  clearElement(analise);
+  revisao.hidden = true;
+}
+
 async function handleUpload(tipo, file, { progress, progressBar }) {
   const revisao = document.getElementById('discente-revisao');
   const analise = document.getElementById('discente-analise');
   progress?.classList.remove('hidden');
   if (progressBar) progressBar.style.width = '0%';
+  limparErroUpload(revisao, analise);
 
   try {
     await validatePdfFile(file);
-    const buffer = await file.arrayBuffer();
+    const rawBuffer = await file.arrayBuffer();
+    // O pdf.js pode transferir/detach o ArrayBuffer; mantemos cópia própria.
+    const buffer = rawBuffer.slice(0);
 
     await validarTipoPDF(tipo, buffer);
 
@@ -197,12 +208,23 @@ async function handleUpload(tipo, file, { progress, progressBar }) {
     console.error(err);
     clearElement(revisao);
     revisao.hidden = false;
+    const mensagem = err?.message || String(err);
+    const amigavel = mensagem.includes('detached') || mensagem.includes('ArrayBuffer')
+      ? 'Ocorreu um erro interno ao ler o PDF. Tente selecionar o arquivo novamente.'
+      : mensagem.includes('não é um PDF válido')
+      ? 'Documento inválido: o arquivo não é um PDF válido do SIGA.'
+      : mensagem;
     revisao.appendChild(
-      el('div', { className: 'card' }, [
+      el('div', { className: 'card card-aviso' }, [
         el('h3', {}, `Erro ao processar ${tipo === 'boletim' ? 'Boletim' : 'BOA'}`),
-        el('p', { className: 'text-muted' }, err.message),
+        el('p', { className: 'text-muted' }, amigavel),
+        el('p', {}, 'Se o erro persistir, verifique se anexou o arquivo correto ou tente recarregar a página.'),
       ])
     );
+    // Reset para permitir nova tentativa.
+    if (tipo === 'boletim') state.boletim = null;
+    else state.boa = null;
+    updateUploadBadges();
   } finally {
     progress?.classList.add('hidden');
   }

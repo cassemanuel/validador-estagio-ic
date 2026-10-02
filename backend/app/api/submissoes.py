@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..auth.jwt import require_discente
 from ..config import settings
@@ -249,6 +249,7 @@ def minhas_submissoes(
     """Histórico de submissões do discente logado."""
     subs = (
         db.query(Submissao)
+        .options(selectinload(Submissao.decisoes))
         .filter(Submissao.discente_id == user.id)
         .order_by(Submissao.id.desc())
         .all()

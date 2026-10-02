@@ -74,6 +74,9 @@ class Submissao(Base):
     excecoes: Mapped[list["Excecao"]] = relationship(
         back_populates="submissao", cascade="all, delete-orphan"
     )
+    decisoes: Mapped[list["Decisao"]] = relationship(
+        back_populates="submissao", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -123,6 +126,8 @@ class Decisao(Base):
     motivo: Mapped[str | None] = mapped_column(Text)
     decidido_por: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
     decidido_em: Mapped[datetime] = mapped_column(default=utcnow)
+
+    submissao: Mapped[Submissao] = relationship(back_populates="decisoes")
 
     __table_args__ = (
         CheckConstraint(
