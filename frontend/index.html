@@ -273,8 +273,12 @@
       Iniciativa desenvolvida por discentes do Instituto de Computação (IC/UFRJ)
       voltada para o próprio IC/UFRJ, com o objetivo de dar agilidade e
       transparência à validação dos estágios curriculares do BCC (PPC 2022).
+      <span class="footer-note">Motor de parsing calibrado com base no layout SIGA/UFRJ de set/2026.</span>
     </p>
-    <button type="button" id="btn-sobre" class="btn btn-text btn-sm">Sobre o projeto</button>
+    <div class="footer-actions">
+      <button type="button" id="btn-sobre" class="btn btn-text btn-sm">Sobre o projeto</button>
+      <button type="button" id="btn-arquitetura" class="btn btn-text btn-sm">Arquitetura, Segurança e Melhorias Futuras</button>
+    </div>
   </footer>
 
   <!-- Modal "Sobre o Projeto" -->
@@ -298,16 +302,114 @@
           sob o <strong>PPC 2022</strong>, integrando a extração local dos documentos
           SIGA (Boletim Não Oficial + BOA) à análise da Comissão de Estágio.
         </p>
+        <p class="text-muted">
+          <strong>Versão técnica:</strong> motor de parsing calibrado com base no layout
+          SIGA/UFRJ de setembro/2026.
+        </p>
         <h3>Segurança e Governança</h3>
         <ul>
           <li>PDFs são processados no navegador e só enviados ao servidor após confirmação.</li>
-          <li>Os arquivos brutos são expurgados após a conclusão do processo, conforme política de retenção.</li>
+          <li>Os arquivos brutos são cifrados em repouso e expurgados após a conclusão do processo.</li>
           <li>Todas as ações são registradas em log transacional imutável com hash chain.</li>
           <li>Dados tratados conforme a LGPD.</li>
         </ul>
       </div>
       <footer class="modal-footer">
         <button type="button" id="modal-sobre-ok" class="btn btn-primary">Entendi</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- Modal "Arquitetura, Segurança e Melhorias Futuras" -->
+  <dialog id="modal-arquitetura" class="modal modal-wide">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2>Arquitetura, Segurança e Melhorias Futuras</h2>
+        <button type="button" id="modal-arquitetura-fechar" class="btn-icon" aria-label="Fechar">
+          <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+      </header>
+      <div class="modal-body">
+        <section class="arch-card">
+          <h3><i class="bi bi-cpu"></i> Por que a solução funciona</h3>
+          <p>
+            O motor de parsing executa <strong>client-side</strong>, no navegador do discente,
+            usando o <code>pdf.js</code> vendored sob <code>/vendor/pdfjs/</code>. Os PDFs
+            nunca rodam código JavaScript (<code>isEvalSupported: false</code>) e o processamento
+            fica isolado na memória local, sem enviar o documento bruto a serviços externos.
+          </p>
+          <p>
+            A calibração foi feita com base no layout do <strong>Boletim Não Oficial</strong> e do
+            <strong>BOA (Boletim de Orientação Acadêmica)</strong> do SIGA/UFRJ em
+            <strong>setembro/2026</strong>, agrupando colunas por coordenadas X/Y, identificando
+            rótulos como <em>Cred.</em>, <em>C.H.</em>, <em>Per.</em> e distinguindo a zona de
+            disciplinas aprovadas da zona de pendências.
+          </p>
+        </section>
+
+        <section class="arch-card arch-warning">
+          <h3><i class="bi bi-exclamation-triangle"></i> Mitigação de Risco Curricular/SIGA</h3>
+          <p>
+            Se a PR1/DRE alterar o layout visual do BOA em ciclos futuros (ex.: 2028), o
+            parser baseado em coordenadas exigirá <strong>recalibração</strong>. A
+            arquitetura prevê contingência documentada para a Comissão: manter um
+            <strong>formulário alternativo temporário</strong> (Google Forms institucional)
+            enquanto a expressão de coordenadas é reajustada no código.
+          </p>
+        </section>
+
+        <section class="arch-card">
+          <h3><i class="bi bi-shield-check"></i> Segurança e Hardening</h3>
+          <ul>
+            <li><strong>Magic bytes:</strong> todo PDF deve iniciar com <code>%PDF-</code>.</li>
+            <li><strong>Limite de tamanho:</strong> 15 MB por arquivo.</li>
+            <li><strong>Path traversal:</strong> DRE é sanitizado e nomes seguem padrão fixo.</li>
+            <li><strong>PDF bombs:</strong> máximo de 25 páginas e <code>isEvalSupported: false</code>.</li>
+            <li><strong>XSS:</strong> DOM renderiza text nodes e URLs são sanitizadas.</li>
+            <li><strong>RBAC:</strong> endpoints <code>/api/comissao/*</code> exigem papel <code>comissao</code>.</li>
+          </ul>
+        </section>
+
+        <section class="arch-card">
+          <h3><i class="bi bi-lock"></i> Criptografia em Repouso</h3>
+          <p>
+            Os PDFs são cifrados com <strong>Fernet</strong> (AES-128-CBC + HMAC-SHA256) e
+            gravados como <code>data/uploads/*.bin</code>. A chave vem de
+            <code>STORAGE_ENCRYPTION_KEY</code> ou é derivada de <code>JWT_SECRET</code> via
+            PBKDF2-HMAC-SHA256. O servidor decifra o arquivo <strong>apenas em memória</strong>
+            durante o stream para a mesa de curadoria.
+          </p>
+        </section>
+
+        <section class="arch-card">
+          <h3><i class="bi bi-journal-check"></i> Integridade da Base</h3>
+          <p>
+            O SQLite roda em modo WAL (resiliência a quedas) e o <code>audit_log</code> é
+            imutável, com encadeamento de hash SHA-256 entre eventos. Qualquer alteração
+            posterior fica detectável.
+          </p>
+        </section>
+
+        <section class="arch-card">
+          <h3><i class="bi bi-cloud-arrow-up"></i> Integração com Nuvem Institucional</h3>
+          <p>
+            <strong>Roadmap:</strong> rotina de exportação periódica de <code>.csv</code>/<code>.jsonl</code>
+            e script de sincronização do volume <code>./data</code> via WebDAV do Nextcloud do IC
+            ou <code>rclone</code>, garantindo redundância off-site sem expor os documentos brutos.
+          </p>
+        </section>
+
+        <section class="arch-card">
+          <h3><i class="bi bi-envelope"></i> Notificações Automáticas por E-mail</h3>
+          <p>
+            <strong>Roadmap:</strong> envio em background via SMTP institucional do Google Workspace
+            (<code>@ic.ufrj.br</code>, porta 587 STARTTLS) para deliberações de deferimento,
+            indeferimento e devolução.
+          </p>
+        </section>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" id="modal-arquitetura-ok" class="btn btn-primary">Entendi</button>
       </footer>
     </div>
   </dialog>

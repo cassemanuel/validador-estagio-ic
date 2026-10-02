@@ -2221,6 +2221,59 @@ th {
   border-top: 1px solid var(--divider-color);
 }
 
+.modal-wide .modal-content {
+  width: min(900px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-sm);
+}
+
+.footer-note {
+  display: block;
+  margin-top: var(--spacing-xs);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
+.arch-card {
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.arch-warning {
+  border-left: 4px solid #f59e0b;
+}
+
+.arch-card h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: 0;
+  margin-bottom: var(--spacing-sm);
+  font-size: 1.1rem;
+  color: var(--cor-ic1);
+}
+
+[data-theme="dark"] .arch-card {
+  background-color: #0f172a;
+  border-color: #334155;
+}
+
+[data-theme="dark"] .arch-card h3 {
+  color: #60a5fa;
+}
+
 /* Responsividade da navegação */
 @media (max-width: 768px) {
   .app-header {

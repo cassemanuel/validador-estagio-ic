@@ -22,6 +22,7 @@ function init() {
   initDevLogin();
   initLogout();
   initSobreModal();
+  initArquiteturaModal();
   initNavegacaoSPA();
   bootstrapSessao();
 }
@@ -31,6 +32,22 @@ function initSobreModal() {
   const btn = document.getElementById('btn-sobre');
   const fechar = document.getElementById('modal-sobre-fechar');
   const ok = document.getElementById('modal-sobre-ok');
+  if (!modal) return;
+  const abrir = () => modal.showModal();
+  const fecharFn = () => modal.close();
+  btn?.addEventListener('click', abrir);
+  fechar?.addEventListener('click', fecharFn);
+  ok?.addEventListener('click', fecharFn);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) fecharFn();
+  });
+}
+
+function initArquiteturaModal() {
+  const modal = document.getElementById('modal-arquitetura');
+  const btn = document.getElementById('btn-arquitetura');
+  const fechar = document.getElementById('modal-arquitetura-fechar');
+  const ok = document.getElementById('modal-arquitetura-ok');
   if (!modal) return;
   const abrir = () => modal.showModal();
   const fecharFn = () => modal.close();

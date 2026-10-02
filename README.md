@@ -103,6 +103,11 @@ e os PDFs cifrados (`data/uploads/*.bin`) persistem no servidor hospedeiro,
 mesmo após o container ser destruído. Para backup, basta copiar o diretório
 `data/`.
 
+## Documentação detalhada
+
+- [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) — visão arquitetural completa, modelo de dados, criptografia at-rest, SQLite WAL e governança.
+- [`docs/ROADMAP_MELHORIAS.md`](docs/ROADMAP_MELHORIAS.md) — melhorias planejadas: LDAP, backup Nextcloud/WebDAV, notificações SMTP, contingência para mudanças de layout do SIGA e CI/CD.
+
 ## Como rodar
 
 ### Docker (recomendado)
