@@ -43,7 +43,10 @@ def main():
     }
     r = aluno.post(
         f"{BASE}/api/submissoes",
-        files={"pdf": ("boa.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        files={
+            "boletim": ("boletim.pdf", b"%PDF-1.4 fake boletim", "application/pdf"),
+            "boa": ("boa.pdf", b"%PDF-1.4 fake boa", "application/pdf"),
+        },
         data={"payload": json.dumps(payload)},
     )
     assert r.status_code == 200, r.text
@@ -71,7 +74,10 @@ def main():
     # Reenvio: nova submissão ativa após decisão terminal
     r = aluno.post(
         f"{BASE}/api/submissoes",
-        files={"pdf": ("boa2.pdf", b"%PDF-1.4 fake v2", "application/pdf")},
+        files={
+            "boletim": ("boletim2.pdf", b"%PDF-1.4 fake boletim v2", "application/pdf"),
+            "boa": ("boa2.pdf", b"%PDF-1.4 fake boa v2", "application/pdf"),
+        },
         data={"payload": json.dumps(payload)},
     )
     assert r.status_code == 200, r.text
