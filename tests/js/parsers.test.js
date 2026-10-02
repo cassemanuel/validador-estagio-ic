@@ -11,11 +11,15 @@ import {
   limparLinhas,
   parseDisciplinaLine,
   parseHistorico,
+  parseMetadata,
 } from '../../frontend/js/parsers/pdfParser.js';
 import {
   extrairMetadataBOA,
   parsePaginaBOA,
 } from '../../frontend/js/parsers/boaParser.js';
+import { calcularCRAcumulado } from '../../frontend/js/domain/cr.js';
+import { verificarElegibilidadeEstagio } from '../../frontend/js/rules/ppc2022.js';
+import regras from '../../frontend/rules/ciclo_basico.json' with { type: 'json' };
 
 const LINHAS_BOLETIM = [
   // O marcador isolado é filtrado por limparLinhas; no documento real ele
@@ -177,6 +181,18 @@ test('extrairMetadataBOA: nome e DRE em itens separados no topo (layout real BOA
   assert.equal(meta.curso, '85783 - Ciência da Computação');
 });
 
+// Verifica que, em transferências, o curso do cabeçalho posterior (BCC)
+// sobrescreve o curso anterior (BCMT).
+test('parseMetadata mantém o último curso do cabeçalho (transferência BCMT -> BCC)', () => {
+  const lines = [
+    '116844 - Bacharelado em Ciência e Tecnologia',
+    'JOSE BORGES',
+    '85783 - Ciência da Computação',
+  ];
+  const { curso } = parseMetadata(lines);
+  assert.equal(curso, '85783 - Ciência da Computação');
+});
+
 test('coluna BOA concluída sem status de pendência gera cumprido', () => {
   const itens = [
     { str: 'ICP131', x: 100, y: 26 },
@@ -194,4 +210,49 @@ test('coluna BOA concluída sem status de pendência gera cumprido', () => {
   assert.deepEqual(cumpridos.map((c) => c.codigo), ['ICP131']);
   const ap = aprovadas.find((a) => a.codigo === 'MAB120');
   assert.ok(ap);
+});
+
+test('integração BOA + PPC: cumpridos alimentam verificarElegibilidadeEstagio e tornam apto', () => {
+  // Simula o fluxo do portal.js: parser BOA retorna cumpridos/aprovadas,
+  // histórico é montado com essas disciplinas, e o diagnóstico fica apto.
+  let x = 100;
+  const itensPagina1 = regras.ciclo_basico.flatMap((req) => {
+    const col = [
+      { str: req.codigo, x, y: 26 },
+      { str: req.nome, x, y: 78 },
+      { str: '4.0', x, y: 279 },
+      { str: '60', x, y: 319 },
+      { str: String(req.periodo), x, y: 358 },
+      { str: req.codigo, x, y: 386 },
+      { str: req.nome, x, y: 437 },
+      { str: 'AP', x, y: 714 },
+    ];
+    x += 15; // cada disciplina em sua própria coluna
+    return col;
+  });
+
+  const { cumpridos, aprovadas } = parsePaginaBOA(itensPagina1, {
+    credRecomY: 277,
+    perY: 356,
+  });
+  assert.ok(cumpridos.length >= regras.ciclo_basico.length, `cumpridos=${cumpridos.length}`);
+
+  const historico = {
+    metadata: {},
+    periodos: [
+      { periodo: 'Aprovadas (BOA)', disciplinas: [...cumpridos, ...aprovadas], totais: {} },
+      {
+        periodo: '2023/1',
+        disciplinas: [
+          { codigo: 'ICP131', nome: 'Prog I', crR: 4, grau: 8.0, pontos: 32, situacao: 'AP', conferGrau: true },
+          { codigo: 'ICP141', nome: 'Prog II', crR: 4, grau: 7.0, pontos: 28, situacao: 'AP', conferGrau: true },
+          { codigo: 'MAE111', nome: 'Calc I', crR: 6, grau: 7.0, pontos: 42, situacao: 'AP', conferGrau: true },
+        ],
+      },
+    ],
+  };
+  historico.resumo = calcularCRAcumulado(historico);
+
+  const diag = verificarElegibilidadeEstagio(historico, regras);
+  assert.equal(diag.apto, true, `esperado apto, mas faltam: ${diag.criterios[0].detalhe}`);
 });

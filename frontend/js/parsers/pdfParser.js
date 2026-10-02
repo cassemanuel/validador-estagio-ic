@@ -252,12 +252,13 @@ function extrairMetadadosDaLinha(line, nextLine, metadata) {
     }
   }
 
-  if (!metadata.curso) {
-    const cursoMatch = line.match(/(\d{4,5}\s*-\s*[A-Za-zÁ-Úá-ú\s]+?)(?=\s*Reconhecimento|\s*Portaria|\s*Unidade|\s*Turno|$)/i);
-    if (cursoMatch) {
-      metadata.curso = cursoMatch[1].trim().replace(/\s+Curso$/i, '');
-      return;
-    }
+  // Curso: em transferências, o primeiro cabeçalho pode ser o curso antigo
+  // (ex: BCMT) e um cabeçalho posterior o curso atual (BCC). Por isso,
+  // sempre sobrescrevemos com a última ocorrência válida.
+  const cursoMatch = line.match(/(\d{4,5}\s*-\s*[A-Za-zÁ-Úá-ú\s]+?)(?=\s*Reconhecimento|\s*Portaria|\s*Unidade|\s*Turno|$)/i);
+  if (cursoMatch) {
+    metadata.curso = cursoMatch[1].trim().replace(/\s+Curso$/i, '');
+    return;
   }
 
   if (!metadata.ingresso) {
