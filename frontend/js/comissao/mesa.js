@@ -112,11 +112,30 @@ function renderLadoPdf(sub) {
   });
 
   const wrap = el('div', { className: 'mesa-pdf-wrap' });
-  wrap.appendChild(conteudo.firstChild ? conteudo : conteudo); // conteudo é o container
+  while (conteudo.firstChild) {
+    wrap.appendChild(conteudo.firstChild);
+  }
+
+  const btnFecharFloat = el('button', {
+    className: 'btn btn-icon btn-fechar-pdf-fullscreen hidden',
+    type: 'button',
+    'aria-label': 'Restaurar visualizador',
+  }, '✕');
+
+  const atualizarEstadoFullscreen = (expandir) => {
+    wrap.classList.toggle('mesa-pdf-fullscreen', expandir);
+    btnExpandir.textContent = expandir ? 'Restaurar visualizador' : 'Expandir visualizador';
+    btnFecharFloat.classList.toggle('hidden', !expandir);
+  };
+
   const btnExpandir = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Expandir visualizador');
-  btnExpandir.addEventListener('click', () => {
-    const expandir = !wrap.classList.toggle('mesa-pdf-fullscreen');
-    btnExpandir.textContent = expandir ? 'Expandir visualizador' : 'Restaurar visualizador';
+  btnExpandir.addEventListener('click', () => atualizarEstadoFullscreen(!wrap.classList.contains('mesa-pdf-fullscreen')));
+  btnFecharFloat.addEventListener('click', () => atualizarEstadoFullscreen(false));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && wrap.classList.contains('mesa-pdf-fullscreen')) {
+      atualizarEstadoFullscreen(false);
+    }
   });
 
   const sha256 = docs.boletim?.sha256 || sub.pdfSha256;
@@ -125,7 +144,7 @@ function renderLadoPdf(sub) {
     sha256 ? el('p', { className: 'text-muted mesa-hash' },
       `sha256 boletim: ${sha256.slice(0, 24)}…`) : null,
     el('div', { className: 'actions-row mesa-pdf-actions' }, [tabs, btnAbrir, btnExpandir]),
-    wrap,
+    el('div', { className: 'mesa-pdf-viewport' }, [wrap, btnFecharFloat]),
   ]);
 }
 

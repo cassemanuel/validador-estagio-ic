@@ -325,10 +325,10 @@ function renderLinha(sub) {
   });
   acoes.appendChild(btnRevisar);
 
-  const linkDoc = (doc, label) => {
-    if (!doc?.disponivel) return el('span', { className: 'text-muted' }, '—');
+  const linkDoc = (tipo, label) => {
+    const url = `/api/comissao/submissoes/${sub.id}/${tipo}`;
     return el('a', {
-      href: doc.url,
+      href: url,
       target: '_blank',
       rel: 'noopener',
       className: 'doc-link',
@@ -376,8 +376,8 @@ function renderLinha(sub) {
     el('td', {}, criterios.length ? `${ok}/${criterios.length}` : '—'),
     situacaoCell,
     statusCell,
-    el('td', {}, linkDoc(documentos?.boletim || {}, 'Boletim')),
-    el('td', {}, linkDoc(documentos?.boa || {}, 'BOA')),
+    el('td', {}, linkDoc('boletim', 'Ver Boletim')),
+    el('td', {}, linkDoc('boa', 'Ver BOA')),
     acoes,
   ]);
 }

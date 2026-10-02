@@ -935,21 +935,27 @@ function getOptativasCursadas(pendencias) {
 function renderPendencias(pendencias) {
   const itemObr = (d) => el('li', {}, `${d.codigo || d.nome} — ${d.status || 'pendente'}`);
 
-  // Optativas: resumir em 11 slots, preenchendo só com disciplinas JÁ CURSADAS/APROVADAS.
-  const cursadas = getOptativasCursadas(pendencias);
-  const totalSlots = 11;
-  const faltam = Math.max(0, totalSlots - cursadas.length);
-  const slots = [];
-  for (let i = 1; i <= totalSlots; i += 1) {
-    const d = cursadas[i - 1];
-    if (d) {
-      const nota = d.grau ? ` (${d.situacao} ${d.grau})` : '';
-      slots.push(el('li', { className: 'slot-preenchido' }, `${i}. ${d.codigo} - ${d.nome}${nota}`));
-    } else {
-      slots.push(el('li', { className: 'slot-vago' },
-        `Slot ${i}: Pendente (Faltam ${faltam} eletiva${faltam === 1 ? '' : 's'} para integralizar)`));
+  // Optativas: cálculo por saldo de créditos extraído do Resumo do BOA.
+  const resumo = state.boa?.dados?.resumo;
+  const faltantesCred = resumo?.creditosFaltantes ?? null;
+  const totalCredExigidos = 44; // 32 + 8 + 4 conforme PPC 2022 / BOA
+  const totalCredCumpridos = resumo
+    ? totalCredExigidos - resumo.creditosFaltantes
+    : null;
+
+  const renderOptativas = () => {
+    if (faltantesCred == null || faltantesCred <= 0) {
+      return el('div', { className: 'slot-preenchido' },
+        `Eletivas e Optativas Concluídas (${totalCredCumpridos || totalCredExigidos}/${totalCredExigidos} créditos)`);
     }
-  }
+    const eletivas4 = Math.floor(faltantesCred / 4);
+    const resto = faltantesCred % 4;
+    const partes = [];
+    if (eletivas4 > 0) partes.push(`Faltam ${eletivas4} eletiva${eletivas4 === 1 ? '' : 's'} de 4 créditos`);
+    if (resto > 0) partes.push(`+ 1 eletiva de ${resto} crédito${resto === 1 ? '' : 's'}`);
+    const creditosTexto = partes.join('; ') || `Faltam ${faltantesCred} créditos`;
+    return el('div', { className: 'slot-vago' }, `${creditosTexto} (de ${totalCredExigidos} créditos exigidos)`);
+  };
 
   return el('div', { className: 'card' }, [
     el('h3', {}, 'Pendências detectadas (BOA)'),
@@ -962,8 +968,15 @@ function renderPendencias(pendencias) {
             : [el('li', { className: 'text-muted' }, 'Nenhuma obrigatória pendente.')]),
       ]),
       el('div', {}, [
-        el('h4', {}, `Optativas/Eletivas (${cursadas.length}/${totalSlots})`),
-        el('ol', { className: 'slots-eletivas' }, slots),
+        el('h4', {}, 'Optativas/Eletivas'),
+        renderOptativas(),
+        resumo?.grupos?.length
+          ? el('ul', { className: 'slots-eletivas' },
+              resumo.grupos.map((g) =>
+                el('li', { className: g.faltante <= 0 ? 'slot-preenchido' : 'slot-vago' },
+                  `${g.nome}: ${g.cumprido}/${g.exigido} créditos`)
+              ))
+          : null,
       ]),
     ]),
   ]);

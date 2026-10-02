@@ -454,9 +454,77 @@ export function parsePaginaBOA(items, faixas) {
 }
 
 /**
+ * Extrai, do quadro de Resumo do BOA, os créditos exigidos e faltantes
+ * dos grupos de eletivas/optativas.
+ *
+ * Procura rótulos como "Escolha Condicionada", "Livre Escolha",
+ * "Escolha Restrita" e valores decimais nas colunas de créditos.
+ * Retorna objeto com total de créditos exigidos e faltantes.
+ *
+ * @param {Array<Array<{str:string, x:number, y:number}>>} paginas
+ * @returns {{grupos: Array<{nome: string, exigido: number, cumprido: number, faltante: number}>, creditosFaltantes: number}}
+ */
+export function extrairResumoBOA(paginas) {
+  const nomes = [
+    ['escolha condicionada', /escolha\s*condicionada/i],
+    ['livre escolha', /livre\s*escolha/i],
+    ['escolha restrita', /escolha\s*restrita|humanidades/i],
+  ];
+
+  const decRegex = /^\d+(?:\.\d+)?$/;
+  const grupos = [];
+  let creditosFaltantes = 0;
+
+  for (const items of paginas) {
+    // Agrupa itens em colunas por X
+    const cols = [];
+    for (const it of items) {
+      let col = cols.find((c) => Math.abs(c.x - it.x) <= 8);
+      if (!col) {
+        col = { x: it.x, itens: [] };
+        cols.push(col);
+      }
+      col.itens.push(it);
+    }
+    cols.sort((a, b) => a.x - b.x);
+
+    for (const [nomePadrao, regex] of nomes) {
+      if (grupos.find((g) => g.nome === nomePadrao)) continue;
+
+      const labelItem = items.find((it) => regex.test(normalize(it.str)));
+      if (!labelItem) continue;
+
+      // Busca a coluna mais próxima à direita do rótulo que tenha
+      // pelo menos 3 números (ex.: exigido, cumprido, faltante).
+      const proximas = cols
+        .filter((c) => c.x > labelItem.x - 5)
+        .sort((a, b) => Math.abs(a.x - (labelItem.x + 80)) - Math.abs(b.x - (labelItem.x + 80)));
+
+      for (const col of proximas) {
+        const numeros = col.itens
+          .map((it) => parseFloat(it.str))
+          .filter((n) => !Number.isNaN(n) && n >= 0);
+        if (numeros.length < 2) continue;
+
+        const exigido = numeros.find((n) => [32, 8, 4, 16, 44, 40].includes(Math.round(n * 10) / 10))
+          ?? numeros[numeros.length - 1];
+        const faltante = Math.max(0, ...numeros.filter((n) => n <= exigido && n !== exigido));
+        const cumprido = Math.max(0, exigido - faltante);
+
+        grupos.push({ nome: nomePadrao, exigido, cumprido, faltante });
+        creditosFaltantes += faltante;
+        break;
+      }
+    }
+  }
+
+  return { grupos, creditosFaltantes };
+}
+
+/**
  * Processa um arquivo BOA e retorna pendências e disciplinas aprovadas.
  * @param {ArrayBuffer | Uint8Array} pdfData
- * @returns {Promise<{obrigatorias: Array<object>, optativas: Array<object>, aprovadas: Array<object>, cumpridos: Array<object>, metadata: object}>}
+ * @returns {Promise<{obrigatorias: Array<object>, optativas: Array<object>, aprovadas: Array<object>, cumpridos: Array<object>, resumo: object, metadata: object}>}
  */
 export async function processarBOA(pdfData, pdfjsLib) {
   const paginas = await extractBOAItems(pdfData, pdfjsLib);
@@ -510,13 +578,16 @@ export async function processarBOA(pdfData, pdfjsLib) {
     }
   }
 
+  const resumo = extrairResumoBOA(paginas);
+
   console.debug('[boaParser] resumo do documento:', {
     paginas: paginas.length,
     aprovadas: aprovadas.map((d) => d.codigo),
     cumpridos: cumpridos.map((d) => d.codigo),
     obrigatorias: obrigatorias.map((d) => d.codigo),
     optativas: optativas.map((d) => d.codigo),
+    resumo,
   });
 
-  return { obrigatorias, optativas, aprovadas, cumpridos, metadata };
+  return { obrigatorias, optativas, aprovadas, cumpridos, resumo, metadata };
 }

@@ -1996,6 +1996,31 @@ p {
   height: 100vh;
 }
 
+.mesa-pdf-viewport {
+  position: relative;
+}
+
+.btn-fechar-pdf-fullscreen {
+  position: fixed;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  z-index: 1001;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+}
+
+.btn-fechar-pdf-fullscreen:hover {
+  background: var(--bg-hover);
+}
+
 .mesa-pdf-actions {
   align-items: center;
   margin-bottom: var(--spacing-sm);
