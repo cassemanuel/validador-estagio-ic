@@ -17,6 +17,7 @@ from ..schemas import SubmissaoPayload
 from ..services import saneamento, triagem
 from ..services.auditoria import registrar
 from ..services.autorizacao import dados_autorizacao
+from ..services import crypto
 from .deps import get_regras
 
 router = APIRouter(prefix="/api/submissoes", tags=["submissoes"])
@@ -111,10 +112,11 @@ def _salvar_pdf(
     dre: str,
     ts: str,
 ) -> tuple[Path, str]:
-    nome_seguro = f"{tipo}_{dre}_{ts}.pdf"
+    nome_seguro = f"{tipo}_{dre}_{ts}.bin"
     caminho = upload_dir / nome_seguro
     dados = upload.file.read()
-    caminho.write_bytes(dados)
+    cifrado = crypto.cifrar(dados)
+    caminho.write_bytes(cifrado)
     return caminho, hashlib.sha256(dados).hexdigest()
 
 
@@ -238,3 +240,91 @@ def minha_submissao(
         .first()
     )
     return {"submissao": _serializar(sub, decisao)}
+
+
+@router.get("/minhas")
+def minhas_submissoes(
+    db: Session = Depends(get_db), user: Usuario = Depends(require_discente)
+):
+    """Histórico de submissões do discente logado."""
+    subs = (
+        db.query(Submissao)
+        .filter(Submissao.discente_id == user.id)
+        .order_by(Submissao.id.desc())
+        .all()
+    )
+    return {"submissoes": [_serializar_completo(sub) for sub in subs]}
+
+
+@router.post("/{sub_id}/cancelar")
+def cancelar_submissao(
+    sub_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_discente),
+):
+    """Cancela uma submissão ainda não deliberada e expurga os PDFs."""
+    sub = db.query(Submissao).filter_by(id=sub_id, discente_id=user.id).first()
+    if not sub:
+        raise HTTPException(404, "Submissão não encontrada.")
+    if sub.status not in ("fila_regular", "mesa_revisao"):
+        raise HTTPException(409, "Submissão já foi deliberada e não pode ser cancelada.")
+
+    for attr in ("boletim_path", "boa_path", "pdf_path"):
+        path_str = getattr(sub, attr, None)
+        if path_str:
+            try:
+                Path(path_str).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    sub.status = "cancelada"
+    sub.pdf_expurgado_em = datetime.now(timezone.utc)
+    registrar(
+        db,
+        user,
+        "submissao_cancelada",
+        "submissao",
+        sub.id,
+        {
+            "boletim_sha256": sub.boletim_sha256,
+            "boa_sha256": sub.boa_sha256,
+        },
+    )
+    db.commit()
+    db.refresh(sub)
+    return {"submissao": _serializar(sub)}
+
+
+def _serializar_completo(sub: Submissao) -> dict:
+    from ..models import Decisao  # import local para evitar ciclos
+
+    metadata = json.loads(sub.metadata_json)
+    decisao = (
+        sub.decisoes[-1] if sub.decisoes else None
+    )
+    return {
+        "id": sub.id,
+        "status": sub.status,
+        "tipoDocumento": sub.tipo_documento,
+        "metadata": metadata,
+        "documentos": {
+            "boletim": {
+                "nome": metadata.get("nomeArquivoBoletim") or "boletim.pdf",
+                "sha256": sub.boletim_sha256,
+            },
+            "boa": {
+                "nome": metadata.get("nomeArquivoBoa") or "boa.pdf",
+                "sha256": sub.boa_sha256,
+            },
+        },
+        "diagnostico": json.loads(sub.diagnostico_json) if sub.diagnostico_json else None,
+        "criadoEm": sub.criado_em.isoformat() if sub.criado_em else None,
+        "concluidoEm": sub.concluido_em.isoformat() if sub.concluido_em else None,
+        "decisao": {
+            "decisao": decisao.decisao,
+            "motivo": decisao.motivo,
+            "decididoEm": decisao.decidido_em.isoformat() if decisao.decidido_em else None,
+        }
+        if decisao
+        else None,
+    }

@@ -77,7 +77,7 @@ class Submissao(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('fila_regular','mesa_revisao','aprovada','indeferida','devolvida')",
+            "status IN ('fila_regular','mesa_revisao','aprovada','indeferida','devolvida','cancelada')",
             name="ck_submissao_status",
         ),
     )

@@ -185,3 +185,53 @@ def test_expurgo_apos_retencao(client):
     # PDF expurgado → 410
     resp = client.get(f"/api/comissao/submissoes/{sub['id']}/boletim")
     assert resp.status_code == 410
+
+
+def test_rbac_discente_nao_acessa_comissao(client):
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+    assert client.get("/api/comissao/fila").status_code == 403
+    assert (
+        client.get(f"/api/comissao/submissoes/{sub['id']}/boletim").status_code
+        == 403
+    )
+
+
+def test_pdfs_cifrados_at_rest(client):
+    from app.db import SessionLocal
+    from app.models import Submissao
+
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+
+    with SessionLocal() as db:
+        s = db.get(Submissao, sub["id"])
+        boletim_path = Path(s.boletim_path)
+        assert boletim_path.exists()
+        conteudo = boletim_path.read_bytes()
+        assert not conteudo.startswith(b"%PDF-")
+
+
+def test_cancelamento_submissao_pelo_discente(client):
+    from app.db import SessionLocal
+    from app.models import AuditLog, Submissao
+
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+    with SessionLocal() as db:
+        s = db.get(Submissao, sub["id"])
+        boletim_path = Path(s.boletim_path)
+        assert boletim_path.exists()
+
+    resp = client.post(f"/api/submissoes/{sub['id']}/cancelar")
+    assert resp.status_code == 200
+    assert resp.json()["submissao"]["status"] == "cancelada"
+    assert not boletim_path.exists()
+
+    with SessionLocal() as db:
+        assert (
+            db.query(AuditLog)
+            .filter_by(acao="submissao_cancelada", entidade_id=sub["id"])
+            .count()
+            == 1
+        )

@@ -38,6 +38,7 @@ const STATUS_LABEL = {
   aprovada: 'Aprovada',
   indeferida: 'Indeferida',
   devolvida: 'Devolvida para correção',
+  cancelada: 'Cancelada pelo discente',
 };
 
 const STATUS_BADGE = {
@@ -46,6 +47,7 @@ const STATUS_BADGE = {
   aprovada: 'badge-ap',
   indeferida: 'badge-reprovado',
   devolvida: 'badge-neutro',
+  cancelada: 'badge-neutro',
 };
 
 const STATUS_ATIVOS = ['fila_regular', 'mesa_revisao'];
@@ -63,6 +65,7 @@ export async function initPortal() {
   }
 
   const { submissao } = await api('/api/submissoes/minha');
+  await renderHistorico();
   if (!submissao) {
     resetUploadState();
     fluxoEl.hidden = false;
@@ -280,11 +283,16 @@ async function submitDocuments(btn, erro) {
   erro.hidden = true;
   try {
     const dados = getMergedDados();
+    const metadata = {
+      ...dados.metadata,
+      nomeArquivoBoletim: state.boletim.file?.name || 'boletim.pdf',
+      nomeArquivoBoa: state.boa.file?.name || 'boa.pdf',
+    };
     const form = new FormData();
     form.append('boletim', state.boletim.file);
     form.append('boa', state.boa.file);
     form.append('payload', JSON.stringify({
-      metadata: dados.metadata,
+      metadata,
       periodos: dados.periodos,
       pendencias: dados.pendencias,
       diagnostico: state.diagnostico || {},
@@ -356,6 +364,21 @@ function renderStatus(container, sub) {
     });
   }
 
+  const btnCancelar = !concluida
+    ? el('button', { className: 'btn btn-danger', type: 'button' }, 'Cancelar Solicitação')
+    : null;
+  if (btnCancelar) {
+    btnCancelar.addEventListener('click', async () => {
+      if (!confirm('Tem certeza que deseja cancelar esta solicitação?')) return;
+      try {
+        await api(`/api/submissoes/${sub.id}/cancelar`, { method: 'POST' });
+        await initPortal();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  }
+
   container.appendChild(
     el('div', { className: 'card' }, [
       el('div', { className: 'estagio-header' }, [
@@ -390,8 +413,64 @@ function renderStatus(container, sub) {
         ? el('p', { className: 'text-muted' }, 'Seu caso está na Mesa de Revisão para conferência detalhada.')
         : null,
       btnNova,
+      btnCancelar,
     ])
   );
+}
+
+async function renderHistorico() {
+  const container = document.getElementById('discente-historico');
+  if (!container) return;
+  clearElement(container);
+
+  let resp;
+  try {
+    resp = await api('/api/submissoes/minhas');
+  } catch {
+    return;
+  }
+  const subs = resp.submissoes || [];
+  if (!subs.length) {
+    container.hidden = true;
+    return;
+  }
+  container.hidden = false;
+
+  const rows = subs.map((s) => {
+    const decisao = s.decisao;
+    return el('tr', {}, [
+      el('td', {}, new Date(s.criadoEm).toLocaleDateString('pt-BR')),
+      el('td', {}, [
+        s.documentos?.boletim?.nome || '—',
+        el('br'),
+        s.documentos?.boa?.nome || '—',
+      ]),
+      el('td', {}, [
+        el('span', { className: `badge ${STATUS_BADGE[s.status] || 'badge-neutro'}` },
+          STATUS_LABEL[s.status] || s.status),
+      ]),
+      el('td', {}, decisao
+        ? `${new Date(decisao.decididoEm).toLocaleDateString('pt-BR')}${decisao.motivo ? ' · ' + decisao.motivo : ''}`
+        : '—'),
+    ]);
+  });
+
+  container.appendChild(el('div', { className: 'card' }, [
+    el('h3', {}, 'Histórico de Solicitações'),
+    el('div', { className: 'table-container' }, [
+      el('table', { className: 'triage-table' }, [
+        el('thead', {}, [
+          el('tr', {}, [
+            el('th', {}, 'Data do Envio'),
+            el('th', {}, 'Documentos Anexados'),
+            el('th', {}, 'Status'),
+            el('th', {}, 'Parecer / Motivo'),
+          ]),
+        ]),
+        el('tbody', {}, rows),
+      ]),
+    ]),
+  ]));
 }
 
 /* ============================================================

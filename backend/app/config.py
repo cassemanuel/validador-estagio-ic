@@ -1,8 +1,22 @@
 """Configurações da aplicação via variáveis de ambiente (.env)."""
 
+import base64
 from pathlib import Path
 
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _derive_key(secret: str, salt: bytes = b"validador-estagio-ic-v1") -> bytes:
+    """Deriva chave AES-256 (32 bytes) a partir de um segredo arbitrário."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100_000,
+    )
+    return base64.urlsafe_b64encode(kdf.derive(secret.encode("utf-8")))
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_RULES = _REPO_ROOT / "frontend" / "rules" / "ciclo_basico.json"
@@ -18,6 +32,9 @@ class Settings(BaseSettings):
     # Sessão JWT (cookie httpOnly)
     jwt_secret: str = "dev-secret-troque-em-producao"
     jwt_expire_minutes: int = 480
+
+    # Criptografia at-rest dos PDFs (Fernet). Se não fornecida, deriva de jwt_secret.
+    storage_encryption_key: str | None = None
     cookie_secure: bool = False  # True em produção (HTTPS)
 
     # Provedor de autenticação: 'local' (seeds) ou 'ldap'
@@ -59,6 +76,12 @@ class Settings(BaseSettings):
     rules_file: str = str(_DEFAULT_RULES)
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def fernet_key(self) -> bytes:
+        if self.storage_encryption_key:
+            return self.storage_encryption_key.encode("utf-8")
+        return _derive_key(self.jwt_secret)
 
 
 settings = Settings()

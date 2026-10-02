@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..auth.jwt import require_comissao
@@ -13,6 +13,7 @@ from ..config import settings
 from ..db import get_db
 from ..models import AuditLog, Decisao, Excecao, Submissao, Usuario
 from ..schemas import DecisaoIn
+from ..services import crypto
 from ..services.auditoria import registrar
 from ..services.autorizacao import dados_autorizacao
 from ..services.metricas import calcular_metricas
@@ -197,6 +198,25 @@ def detalhe(
     return _serializar_completo(_obter_submissao(db, sub_id))
 
 
+def _stream_pdf(path: str, sub: Submissao, user: Usuario, db: Session, acao: str):
+    if sub.pdf_expurgado_em is not None:
+        raise HTTPException(410, "PDF expurgado por política de retenção.")
+    if not path or not Path(path).exists():
+        raise HTTPException(404, "Documento indisponível.")
+
+    registrar(db, user, acao, "submissao", sub.id)
+    db.commit()
+
+    def iterfile():
+        with open(path, "rb") as f:
+            token = f.read()
+        yield crypto.decifrar(token)
+
+    return StreamingResponse(
+        iterfile(), media_type="application/pdf", headers={"Content-Disposition": "inline"}
+    )
+
+
 @router.get("/submissoes/{sub_id}/boletim")
 def boletim_pdf(
     sub_id: int,
@@ -204,14 +224,7 @@ def boletim_pdf(
     user: Usuario = Depends(require_comissao),
 ):
     sub = _obter_submissao(db, sub_id)
-    if sub.pdf_expurgado_em is not None:
-        raise HTTPException(410, "PDF expurgado por política de retenção.")
-    if not sub.boletim_path or not Path(sub.boletim_path).exists():
-        raise HTTPException(404, "Boletim indisponível.")
-
-    registrar(db, user, "acesso_boletim", "submissao", sub.id)
-    db.commit()
-    return FileResponse(sub.boletim_path, media_type="application/pdf")
+    return _stream_pdf(sub.boletim_path, sub, user, db, "acesso_boletim")
 
 
 @router.get("/submissoes/{sub_id}/boa")
@@ -221,14 +234,7 @@ def boa_pdf(
     user: Usuario = Depends(require_comissao),
 ):
     sub = _obter_submissao(db, sub_id)
-    if sub.pdf_expurgado_em is not None:
-        raise HTTPException(410, "PDF expurgado por política de retenção.")
-    if not sub.boa_path or not Path(sub.boa_path).exists():
-        raise HTTPException(404, "BOA indisponível.")
-
-    registrar(db, user, "acesso_boa", "submissao", sub.id)
-    db.commit()
-    return FileResponse(sub.boa_path, media_type="application/pdf")
+    return _stream_pdf(sub.boa_path, sub, user, db, "acesso_boa")
 
 
 @router.get("/submissoes/{sub_id}/pdf")
