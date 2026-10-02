@@ -43,7 +43,7 @@ def init_db() -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
     models.Base.metadata.create_all(engine)
-    _migrar_check_arquivada()
+    _migrar_schema_submissoes()
 
     # Provisiona usuários seed (SEED_USERS) e membros da comissão.
     with Session(engine) as db:
@@ -70,9 +70,14 @@ def init_db() -> None:
         db.commit()
 
 
-def _migrar_check_arquivada() -> None:
-    """Reconstrói `submissoes` quando o CHECK de status não contempla
-    'arquivada' — o SQLite não permite ALTER em CHECK constraints."""
+def _migrar_schema_submissoes() -> None:
+    """Reconstrói `submissoes` quando o schema é anterior ao modelo atual.
+
+    O SQLite não permite ALTER em CHECK constraints, então a tabela é
+    recriada (CREATE → INSERT colunas em comum → DROP → RENAME) quando:
+      - o CHECK de status não contempla 'arquivada', ou
+      - falta a coluna `status_anterior` (usada pelo desarquivamento).
+    """
     from sqlalchemy.schema import CreateTable
 
     from .models import Submissao
@@ -84,15 +89,28 @@ def _migrar_check_arquivada() -> None:
             "SELECT sql FROM sqlite_master "
             "WHERE type='table' AND name='submissoes'"
         ).fetchone()
-        if not ddl_atual or "'arquivada'" in (ddl_atual[0] or ""):
+        if not ddl_atual:
             return
+        ddl = ddl_atual[0] or ""
+        colunas_atuais = {
+            r[1] for r in cur.execute("PRAGMA table_info(submissoes)")
+        }
+        if "'arquivada'" in ddl and "status_anterior" in colunas_atuais:
+            return
+
         ddl_novo = str(CreateTable(Submissao.__table__).compile(engine))
         ddl_novo = ddl_novo.replace(
             "CREATE TABLE submissoes", "CREATE TABLE submissoes_nova"
         )
+        colunas_novas = [c.name for c in Submissao.__table__.columns]
+        comum = ", ".join(c for c in colunas_novas if c in colunas_atuais)
+
         cur.execute("PRAGMA foreign_keys=OFF")
         cur.execute(ddl_novo)
-        cur.execute("INSERT INTO submissoes_nova SELECT * FROM submissoes")
+        cur.execute(
+            f"INSERT INTO submissoes_nova ({comum}) "
+            f"SELECT {comum} FROM submissoes"
+        )
         cur.execute("DROP TABLE submissoes")
         cur.execute("ALTER TABLE submissoes_nova RENAME TO submissoes")
         cur.execute("PRAGMA foreign_keys=ON")

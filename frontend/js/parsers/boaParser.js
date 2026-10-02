@@ -489,16 +489,27 @@ export function extrairResumoBOA(paginas) {
   let creditosFaltantes = 0;
 
   for (const items of paginas) {
+    const escolhidos = [];
     for (const [nomePadrao, regex] of nomes) {
       if (grupos.find((g) => g.nome === nomePadrao)) continue;
 
       const exigido = CREDITOS_EXIGIDOS[nomePadrao];
-      const rotulos = items.filter((it) => regex.test(normalize(it.str)));
+      let rotulos = items.filter((it) => regex.test(normalize(it.str)));
       if (!rotulos.length) continue;
 
       // O rótulo do grupo pode aparecer mais de uma vez na página (legenda,
-      // quadro de disciplinas, resumo). Só a ocorrência da tabela de resumo
-      // tem números à direita — avalia-se cada uma e prefere-se a que tem.
+      // grade de pendências, quadro de resumo). As linhas do resumo ficam
+      // agrupadas — prefere-se a ocorrência mais próxima dos outros grupos.
+      if (rotulos.length > 1 && escolhidos.length) {
+        rotulos = [...rotulos].sort(
+          (a, b) =>
+            Math.min(...escolhidos.map((x) => Math.abs(a.y - x.y))) -
+            Math.min(...escolhidos.map((x) => Math.abs(b.y - x.y)))
+        );
+      }
+
+      // Só a ocorrência da tabela de resumo tem números à direita —
+      // avalia-se cada uma e prefere-se a que tem.
       let faltante = exigido;
       for (const labelItem of rotulos) {
         // Números à direita do rótulo, plausíveis como créditos do grupo —
@@ -521,6 +532,7 @@ export function extrairResumoBOA(paginas) {
           )
           .sort((a, b) => a.x - b.x);
         faltante = linha[linha.length - 1].n;
+        escolhidos.push(labelItem);
         break;
       }
       const cumprido = Math.max(0, exigido - faltante);

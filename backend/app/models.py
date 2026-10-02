@@ -57,6 +57,7 @@ class Submissao(Base):
         ForeignKey("usuarios.id"), nullable=False
     )
     status: Mapped[str] = mapped_column(Text, nullable=False)
+    status_anterior: Mapped[str | None] = mapped_column(Text)
     tipo_documento: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False)
     dados_extraidos_json: Mapped[str] = mapped_column(Text, nullable=False)

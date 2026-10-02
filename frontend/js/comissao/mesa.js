@@ -85,9 +85,10 @@ function renderLadoPdf(sub, docInicial = 'boletim') {
 
   ['boletim', 'boa'].forEach((nome) => {
     const btn = el('button', {
-      className: `tab-btn ${abaAtiva() === nome ? 'active' : ''}`,
+      className: `tab-btn tab-doc ${abaAtiva() === nome ? 'active' : ''}`,
       type: 'button',
       'aria-pressed': String(abaAtiva() === nome),
+      dataset: { doc: nome },
     }, nome === 'boletim' ? 'Boletim' : 'BOA');
     btn.addEventListener('click', () => {
       setAbaAtiva(nome);
@@ -110,10 +111,10 @@ function renderLadoPdf(sub, docInicial = 'boletim') {
     className: 'btn btn-secondary btn-sm', type: 'button', disabled: !docAtivo().disponivel,
   }, 'Abrir PDF em nova guia');
   btnAbrir.addEventListener('click', () => {
-    const docAtual = abaAtiva();
-    if (docAtivo().disponivel) {
-      window.open(`/api/comissao/submissoes/${sub.id}/${docAtual}`, '_blank');
-    }
+    // Lê a aba ativa no momento do clique (não o estado do render).
+    const docAtual =
+      tabs.querySelector('.tab-doc.active')?.dataset.doc || abaAtiva();
+    window.open(`/api/comissao/submissoes/${sub.id}/${docAtual}`, '_blank');
   });
 
   const wrap = el('div', { className: 'mesa-pdf-wrap' });
@@ -429,7 +430,7 @@ function renderDeliberacao(sub) {
     botoes.appendChild(criarBotao('Indeferir', 'btn-danger', 'indeferida'));
     botoes.appendChild(criarBotao('Devolver', 'btn-secondary', 'devolvida'));
   } else if (STATUS_ARQUIVAVEIS.includes(sub.status)) {
-    const btnArquivar = el('button', { className: 'btn btn-secondary', type: 'button' }, 'Arquivar Processo');
+    const btnArquivar = el('button', { className: 'btn btn-arquivar', type: 'button' }, 'Arquivar Processo');
     btnArquivar.addEventListener('click', async () => {
       if (!window.confirm('Arquivar este processo? Ele sairá da fila ativa e das contagens do dashboard.')) return;
       try {

@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session
 from ..auth.jwt import require_comissao
 from ..config import settings
 from ..db import get_db
-from ..models import AuditLog, Decisao, Excecao, Submissao, Usuario
+from ..models import (
+    STATUS_SUBMISSAO,
+    AuditLog,
+    Decisao,
+    Excecao,
+    Submissao,
+    Usuario,
+)
 from ..schemas import DecisaoIn, RevogarIn
 from ..services import crypto
 from ..services.auditoria import registrar
@@ -85,7 +92,10 @@ def _obter_submissao(db: Session, sub_id: int) -> Submissao:
 @router.get("/fila")
 def fila(
     tipo: str = Query("todos", pattern="^(regular|revisao|todos)$"),
-    status: str = Query("abertos", pattern="^(abertos|todos|fila_regular|mesa_revisao|aprovada|indeferida|devolvida|cancelada|arquivada)$"),
+    status: str = Query(
+        "abertos",
+        pattern="^(?i:abertos|todos|todas|fila_regular|mesa_revisao|aprovada|indeferida|devolvida|cancelada|revogada|arquivada)$",
+    ),
     q: str = Query("", max_length=100),
     offset: int = Query(0, ge=0),
     limite: int = Query(50, ge=1, le=200),
@@ -93,8 +103,14 @@ def fila(
     _=Depends(require_comissao),
 ):
     """Fila unificada de triagem com busca por nome/DRE, status e paginação."""
+    # Normaliza variantes do cliente ("todas" → "todos", case-insensitive).
+    status = status.lower()
+    if status == "todas":
+        status = "todos"
+
     if status == "todos":
-        status_set = None
+        # "Todas" exclui arquivadas — elas só aparecem no filtro explícito.
+        status_set = tuple(s for s in STATUS_SUBMISSAO if s != "arquivada")
     elif status == "abertos":
         tipo_map = {
             "regular": ("fila_regular",),
@@ -338,9 +354,35 @@ def arquivar(
     if sub.status not in STATUS_ARQUIVAVEIS:
         raise HTTPException(409, "Submissão já está arquivada.")
 
+    sub.status_anterior = sub.status
     sub.status = "arquivada"
     registrar(
-        db, user, "processo_arquivado", "submissao", sub.id
+        db, user, "processo_arquivado", "submissao", sub.id,
+        {"status_anterior": sub.status_anterior},
+    )
+    db.commit()
+    return {"ok": True, "status": sub.status}
+
+
+@router.post("/submissoes/{sub_id}/desarquivar")
+def desarquivar(
+    sub_id: int,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_comissao),
+):
+    """Restaura um processo arquivado ao status em que foi concluído."""
+    sub = _obter_submissao(db, sub_id)
+    if sub.status != "arquivada":
+        raise HTTPException(409, "Submissão não está arquivada.")
+
+    anterior = sub.status_anterior or "indeferida"
+    if anterior not in STATUS_ARQUIVAVEIS:
+        anterior = "indeferida"
+    sub.status = anterior
+    sub.status_anterior = None
+    registrar(
+        db, user, "processo_desarquivado", "submissao", sub.id,
+        {"status_restaurado": anterior},
     )
     db.commit()
     return {"ok": True, "status": sub.status}

@@ -195,6 +195,52 @@ def test_arquivamento_de_processo_concluido(client):
     ).status_code == 403
 
 
+def test_desarquivamento_restaura_status_anterior(client):
+    """Desarquivar restaura o status em que o processo foi concluído."""
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+
+    login(client, "comissao1", "comissao123")
+    client.post(
+        f"/api/comissao/submissoes/{sub['id']}/decisao",
+        json={"decisao": "indeferida", "motivo": "CR insuficiente."},
+    )
+    client.post(f"/api/comissao/submissoes/{sub['id']}/arquivar")
+
+    # "todas" não lista arquivadas; "arquivada" sim
+    todas = client.get("/api/comissao/fila?status=todos").json()
+    assert all(s["id"] != sub["id"] for s in todas["submissoes"])
+
+    resp = client.post(f"/api/comissao/submissoes/{sub['id']}/desarquivar")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "indeferida"
+
+    detalhe = client.get(f"/api/comissao/submissoes/{sub['id']}").json()
+    assert detalhe["status"] == "indeferida"
+
+    # Não desarquiva o que não está arquivado
+    assert client.post(
+        f"/api/comissao/submissoes/{sub['id']}/desarquivar"
+    ).status_code == 409
+
+    eventos = client.get("/api/comissao/auditoria?limite=20").json()["eventos"]
+    assert "processo_desarquivado" in {e["acao"] for e in eventos}
+
+
+def test_fila_status_case_insensitive_e_variantes(client):
+    """O parâmetro status aceita variantes sem gerar 422."""
+    login(client, "aluno1", "aluno123")
+    submeter(client)
+    login(client, "comissao1", "comissao123")
+
+    for valor in ("TODOS", "Todas", "todas", "ARQUIVADA", "Abertos"):
+        resp = client.get(f"/api/comissao/fila?status={valor}")
+        assert resp.status_code == 200, valor
+
+    # Revogada entra no padrão do filtro
+    assert client.get("/api/comissao/fila?status=revogada").status_code == 200
+
+
 def test_autorizacoes_validade_90_dias(client):
     """Deferimento gera autorização com validade = liberação + 90 dias."""
     from datetime import datetime

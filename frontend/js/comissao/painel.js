@@ -27,6 +27,7 @@ const ACAO_LABEL = {
   expurgo_pdfs: 'Expurgo de PDFs',
   arquivamento: 'Arquivamento de logs',
   processo_arquivado: 'Processo arquivado',
+  processo_desarquivado: 'Processo desarquivado',
 };
 
 const fmtData = (iso) =>
@@ -374,6 +375,20 @@ function renderLinha(sub) {
     return btn;
   };
 
+  const btnDesarquivar = el('button', {
+    className: 'btn btn-arquivar btn-sm', type: 'button',
+  }, 'Desarquivar');
+  btnDesarquivar.addEventListener('click', async () => {
+    btnDesarquivar.disabled = true;
+    try {
+      await api(`/api/comissao/submissoes/${sub.id}/desarquivar`, { method: 'POST' });
+      await carregarFila();
+    } catch (err) {
+      alert(err.message);
+      btnDesarquivar.disabled = false;
+    }
+  });
+
   const statusLabel = {
     fila_regular: 'Aguardando Análise',
     mesa_revisao: 'Aguardando Análise',
@@ -402,9 +417,25 @@ function renderLinha(sub) {
     alertas?.length ? el('span', { className: 'badge badge-reprovado' }, `${alertas.length} alerta(s)`) : null,
   ]);
 
+  const nomeLink = el('button', {
+    className: 'nome-link', type: 'button',
+    title: 'Abrir na Mesa de Análise',
+  }, metadata?.nome || 'Nome não identificado');
+  nomeLink.addEventListener('click', () =>
+    navegarPara(`/admin/mesa?id=${sub.id}`));
+
+  // No filtro "Arquivadas", as colunas de documentos dão lugar à ação
+  // de desarquivamento.
+  const celulasDoc = filaParams.status === 'arquivada'
+    ? [el('td', { colspan: '2', className: 'fila-acao-arq' }, btnDesarquivar)]
+    : [
+        el('td', {}, linkDoc('boletim', 'Ver Boletim')),
+        el('td', {}, linkDoc('boa', 'Ver BOA')),
+      ];
+
   return el('tr', { className: aprovacaoImediata ? 'triage-ok' : '' }, [
     el('td', {}, [
-      el('strong', {}, metadata?.nome || 'Nome não identificado'),
+      nomeLink,
       el('br'),
       el('span', { className: 'text-muted' }, `enviado em ${fmtData(sub.criadoEm)}`),
     ]),
@@ -412,8 +443,7 @@ function renderLinha(sub) {
     el('td', {}, metadata?.curso || '—'),
     el('td', {}, criterios.length ? `${ok}/${criterios.length}` : '—'),
     statusCell,
-    el('td', {}, linkDoc('boletim', 'Ver Boletim')),
-    el('td', {}, linkDoc('boa', 'Ver BOA')),
+    ...celulasDoc,
   ]);
 }
 

@@ -489,6 +489,42 @@ a:hover {
   background-color: var(--bg-hover);
 }
 
+.btn-arquivar {
+  border: 2px solid #d97706;
+  background-color: rgba(217, 119, 6, 0.08);
+  color: #b45309;
+  font-weight: 700;
+}
+
+.btn-arquivar:hover {
+  background-color: rgba(217, 119, 6, 0.18);
+}
+
+[data-theme="dark"] .btn-arquivar {
+  color: #fbbf24;
+  border-color: #f59e0b;
+}
+
+.nome-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.nome-link:hover {
+  color: var(--cor-ic1);
+  text-decoration: underline;
+}
+
+[data-theme="dark"] .nome-link:hover {
+  color: var(--cor-ic1-light);
+}
+
 .btn-danger {
   background-color: var(--status-reprovado);
   color: #ffffff;
