@@ -10,7 +10,10 @@
 import { api } from '../api/client.js';
 import { processarPDF } from '../parsers/pdfParser.js';
 import { processarBOA } from '../parsers/boaParser.js';
-import { calcularCRAcumulado } from '../domain/cr.js';
+import {
+  calcularCRAcumulado,
+  extrairPesoDisciplina,
+} from '../domain/cr.js';
 import {
   carregarRegras,
   disciplinasFaltantesCicloBasico,
@@ -512,19 +515,24 @@ export function renderSvgCrEvolution(periodos, crAcumuladoTotal) {
   const innerH = height - margin.top - margin.bottom;
 
   // Série acumulada
+  // Acumulado oficial: soma ponderada dos pontos/créditos das disciplinas
+  // que conferem grau (mesma regra de calcularCRAcumulado) — garante que o
+  // último ponto coincida com o CR acumulado exibido no resumo.
   let acumulado = 0;
   let totalCrR = 0;
   const acumData = periodos.map((p) => {
-    const d = p.disciplinas || [];
-    const crR = d.reduce((s, x) => s + (Number(x.crR) || 0), 0);
-    const pts = d.reduce((s, x) => {
-      const grau = Number(x.grau) || Number(x.pontos) || 0;
-      return s + (grau * (Number(x.crR) || 0));
-    }, 0);
-    totalCrR += crR;
-    acumulado += pts;
+    (p.disciplinas || []).forEach((x) => {
+      const peso = extrairPesoDisciplina(x);
+      totalCrR += peso.crR;
+      acumulado += peso.pontos;
+    });
     return { periodo: p.periodo, cr: totalCrR ? acumulado / totalCrR : 0 };
   });
+
+  // O último ponto é o fechamento oficial exibido no resumo do discente.
+  if (acumData.length && crAcumuladoTotal) {
+    acumData[acumData.length - 1].cr = crAcumuladoTotal;
+  }
 
   const x = (i) => margin.left + (i / Math.max(1, periodos.length - 1)) * innerW;
   const y = (cr) => margin.top + innerH - (cr / 10) * innerH;
@@ -821,7 +829,14 @@ function abrirFormExcecao(req, lista, redesenhar) {
     el('option', { value: 'equivalencia' }, 'Equivalência'),
     el('option', { value: 'aproveitamento' }, 'Aproveitamento'),
     el('option', { value: 'dispensa' }, 'Dispensa'),
+    el('option', { value: 'acordo' }, 'Solicitar Acordo'),
   ]);
+  const ajudaTipo = el('p', { className: 'text-muted excecao-ajuda' });
+  tipo.addEventListener('change', () => {
+    ajudaTipo.textContent = tipo.value === 'acordo'
+      ? 'Solicitação de acordo para cursar e concluir a disciplina pendente no semestre corrente.'
+      : '';
+  });
   const codigo = el('input', {
     type: 'text', placeholder: 'Disciplina cursada (ex.: MAE111)', maxLength: '16',
   });
@@ -834,7 +849,7 @@ function abrirFormExcecao(req, lista, redesenhar) {
 
   const form = el('div', { className: 'card excecao-form' }, [
     el('h4', {}, `Exceção para ${req.codigo} — ${req.nome}`),
-    el('label', {}, ['Tipo ', tipo]),
+    el('label', {}, ['Tipo ', tipo, ajudaTipo]),
     el('label', {}, ['Disciplina cursada (se aplicável) ', codigo]),
     el('label', {}, ['Justificativa ', just]),
     el('div', { className: 'actions-row' }, [salvar, cancelar]),

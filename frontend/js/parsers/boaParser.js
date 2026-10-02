@@ -513,28 +513,31 @@ export function extrairResumoBOA(paginas) {
       let faltante = exigido;
       for (const labelItem of rotulos) {
         // Números da linha, plausíveis como créditos do grupo — valores
-        // acima do teto (ex.: "320" horas de Extensão) são ignorados.
-        // A tolerância de 20px à esquerda cobre rótulos longos como
-        // "Escolha Restrita Grupo Humanidades", cujo X pode invadir a
-        // primeira coluna numérica da tabela.
-        const numericos = items
-          .filter((it) => it.x >= labelItem.x - 20)
+        // acima do teto (ex.: "320" ou "60" de C.H./horas) são ignorados.
+        const candidatos = items
           .map((it) => ({ x: it.x, y: it.y, n: parseFloat(it.str) }))
           .filter((o) => !Number.isNaN(o.n) && o.n >= 0 && o.n <= exigido);
-        if (!numericos.length) continue;
 
         // A linha do grupo é a faixa de Y mais próxima do rótulo: tolera
         // rótulos quebrados em duas linhas ou com Y deslocado das células.
-        // Na tabela de resumo, "Falta Cumprir" é a última coluna (maior X).
-        const dyMin = Math.min(
-          ...numericos.map((o) => Math.abs(o.y - labelItem.y))
-        );
-        const linha = numericos
+        const dyMin = candidatos.length
+          ? Math.min(...candidatos.map((o) => Math.abs(o.y - labelItem.y)))
+          : Infinity;
+        const linha = candidatos
           .filter(
             (o) => Math.abs(o.y - labelItem.y) <= dyMin + TOLERANCIA_LINHA
           )
           .sort((a, b) => a.x - b.x);
-        faltante = linha[linha.length - 1].n;
+        if (!linha.length) continue;
+
+        // "Falta Cumprir" é a última coluna numérica da linha. Prefere-se
+        // números à direita do rótulo (tolerância de 20px cobre rótulos
+        // longos como "Escolha Restrita Grupo Humanidades", cujo X invade
+        // a 1ª coluna); sem eles, aceita o último número da linha — o
+        // rótulo pode ocupar a margem direita da tabela.
+        const direita = linha.filter((o) => o.x >= labelItem.x - 20);
+        const alvo = direita.length ? direita : linha;
+        faltante = alvo[alvo.length - 1].n;
         escolhidos.push(labelItem);
         break;
       }

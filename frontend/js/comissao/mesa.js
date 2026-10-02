@@ -19,6 +19,7 @@ const TIPO_EXCECAO = {
   equivalencia: 'Equivalência',
   aproveitamento: 'Aproveitamento',
   dispensa: 'Dispensa',
+  acordo: 'Solicitar Acordo',
 };
 
 export async function abrirMesa(subId, docInicial = 'boletim') {
@@ -111,9 +112,9 @@ function renderLadoPdf(sub, docInicial = 'boletim') {
     className: 'btn btn-secondary btn-sm', type: 'button', disabled: !docAtivo().disponivel,
   }, 'Abrir PDF em nova guia');
   btnAbrir.addEventListener('click', () => {
-    // Lê a aba ativa no momento do clique (não o estado do render).
-    const docAtual =
-      tabs.querySelector('.tab-doc.active')?.dataset.doc || abaAtiva();
+    // Lê a aba ativa no momento do clique (padrão: boletim).
+    const abaAtivaEl = tabs.querySelector('.tab-doc.active');
+    const docAtual = abaAtivaEl?.dataset.doc || 'boletim';
     window.open(`/api/comissao/submissoes/${sub.id}/${docAtual}`, '_blank');
   });
 

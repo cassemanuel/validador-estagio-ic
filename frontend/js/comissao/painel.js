@@ -33,6 +33,14 @@ const ACAO_LABEL = {
 const fmtData = (iso) =>
   iso ? new Date(iso).toLocaleDateString('pt-BR') : '—';
 
+const fmtDataHora = (iso) =>
+  iso
+    ? new Date(iso).toLocaleString('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'medium',
+      })
+    : '—';
+
 /**
  * Modal de confirmação estilizado (substitui window.prompt/confirm/alert).
  * @param {object} op
@@ -283,7 +291,7 @@ async function carregarAuditoriaDashboard() {
   const itens = eventos.length
     ? eventos.map((e) =>
         el('li', { className: 'audit-item' }, [
-          el('span', { className: 'audit-ts' }, fmtData(e.ts)),
+          el('span', { className: 'audit-ts' }, fmtDataHora(e.ts)),
           el('span', { className: 'audit-ator' }, `${e.ator}${e.papel ? ` (${e.papel})` : ''}`),
           el('span', { className: 'audit-acao' }, ACAO_LABEL[e.acao] || e.acao),
         ])
@@ -495,7 +503,7 @@ function renderLinha(sub) {
     el('td', {}, [
       nomeLink,
       el('br'),
-      el('span', { className: 'text-muted' }, `enviado em ${fmtData(sub.criadoEm)}`),
+      el('span', { className: 'text-muted' }, `enviado em ${fmtDataHora(sub.criadoEm)}`),
     ]),
     el('td', {}, metadata?.dre || '—'),
     el('td', {}, metadata?.curso || '—'),

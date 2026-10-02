@@ -290,6 +290,26 @@ test('extrairResumoBOA: humanidades — rótulo longo invade a coluna numérica'
   assert.equal(r.cumprido, 4);
 });
 
+test('extrairResumoBOA: humanidades — linha real com C.H. e créditos', () => {
+  // Linha oficial do BOA: "Escolha Restrita Grupo Humanidades 60 4 4.0 60 0.0 0"
+  // — os 60 são C.H. (fora do teto de 4 créditos); o último número é o
+  // "Falta cumprir" = 0.
+  const paginas = [[
+    { str: 'Escolha Restrita Grupo Humanidades', x: 10, y: 150 },
+    { str: '60', x: 200, y: 150 },
+    { str: '4', x: 240, y: 150 },
+    { str: '4.0', x: 270, y: 150 },
+    { str: '60', x: 300, y: 150 },
+    { str: '0.0', x: 340, y: 150 },
+    { str: '0', x: 370, y: 150 },
+  ]];
+  const { grupos, creditosFaltantes } = extrairResumoBOA(paginas);
+  const r = grupos.find((g) => g.nome === 'escolha restrita');
+  assert.equal(r.faltante, 0);
+  assert.equal(r.cumprido, 4);
+  assert.equal(creditosFaltantes, 0);
+});
+
 test('extrairResumoBOA: rótulo deslocado em Y ainda encontra a linha', () => {
   // Rótulo quebrado em duas linhas: o Y do texto difere do Y dos números.
   const paginas = [[

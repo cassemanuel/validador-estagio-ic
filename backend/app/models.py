@@ -109,7 +109,7 @@ class Excecao(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "tipo IN ('equivalencia','dispensa','aproveitamento')",
+            "tipo IN ('equivalencia','dispensa','aproveitamento','acordo')",
             name="ck_excecao_tipo",
         ),
         CheckConstraint(

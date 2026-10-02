@@ -12,7 +12,7 @@ class LoginIn(BaseModel):
 
 class ExcecaoIn(BaseModel):
     codigo_requisito: str = Field(min_length=1, max_length=16)
-    tipo: Literal["equivalencia", "dispensa", "aproveitamento"]
+    tipo: Literal["equivalencia", "dispensa", "aproveitamento", "acordo"]
     codigo_cursada: str | None = Field(default=None, max_length=16)
     justificativa: str = Field(min_length=1, max_length=2000)
 

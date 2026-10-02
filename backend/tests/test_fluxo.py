@@ -118,6 +118,22 @@ def test_excecao_vai_para_mesa(client):
     assert resp.json()["status"] == "devolvida"
 
 
+def test_excecao_tipo_acordo_aceito(client):
+    login(client, "aluno1", "aluno123")
+    payload = payload_apto(
+        diagnostico={"apto": False, "criterios": []},
+        excecoes=[
+            {
+                "codigo_requisito": "MAD243",
+                "tipo": "acordo",
+                "justificativa": "Solicitar acordo para concluir no semestre.",
+            }
+        ],
+    )
+    sub = submeter(client, payload).json()
+    assert sub["status"] == "mesa_revisao"
+
+
 def test_submissao_dupla_bloqueada(client):
     login(client, "aluno1", "aluno123")
     assert submeter(client).status_code == 200
