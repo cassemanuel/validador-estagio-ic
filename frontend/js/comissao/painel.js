@@ -273,7 +273,6 @@ export async function carregarFila() {
             el('th', { scope: 'col' }, 'DRE'),
             el('th', { scope: 'col' }, 'Curso'),
             el('th', { scope: 'col' }, 'Critérios'),
-            el('th', { scope: 'col' }, 'Situação'),
             el('th', { scope: 'col' }, 'Status'),
             el('th', { scope: 'col' }, 'Boletim'),
             el('th', { scope: 'col' }, 'BOA'),
@@ -327,40 +326,34 @@ function renderLinha(sub) {
 
   const linkDoc = (tipo, label) => {
     const url = `/api/comissao/submissoes/${sub.id}/${tipo}`;
-    return el('a', {
+    const a = el('a', {
       href: url,
       target: '_blank',
-      rel: 'noopener',
+      rel: 'noopener noreferrer',
       className: 'doc-link',
     }, label);
+    a.setAttribute('data-spa', 'false');
+    return a;
   };
 
-  const situacaoLabel = {
-    fila_regular: 'Na Fila',
-    mesa_revisao: 'Em Revisão',
+  const statusLabel = {
+    fila_regular: 'Aguardando Análise',
+    mesa_revisao: 'Aguardando Análise',
     aprovada: 'Aprovado',
     indeferida: 'Indeferido',
-    devolvida: 'Devolvido',
     cancelada: 'Cancelado',
   };
-  const situacaoClass = {
+  const statusClass = {
     fila_regular: 'badge-cursando',
-    mesa_revisao: 'badge-alerta',
+    mesa_revisao: 'badge-cursando',
     aprovada: 'badge-ap',
     indeferida: 'badge-reprovado',
-    devolvida: 'badge-reprovado',
     cancelada: 'badge-neutro',
   };
-  const situacaoCell = el('td', {}, [
-    el('span', { className: `badge ${situacaoClass[sub.status] || 'badge-neutro'}` },
-      situacaoLabel[sub.status] || sub.status),
-  ]);
-
   const statusCell = el('td', {}, [
-    aprovacaoImediata
-      ? el('span', { className: 'badge badge-ap' }, 'Aprovação imediata')
-      : el('span', { className: `badge ${apto ? 'badge-cursando' : 'badge-neutro'}` },
-          apto ? 'Apto' : 'Pendências'),
+    el('span', { className: `badge ${statusClass[sub.status] || 'badge-neutro'}` },
+      statusLabel[sub.status] || sub.status),
+    aprovacaoImediata ? el('span', { className: 'badge badge-ap' }, 'Aprovação imediata') : null,
     excecoes?.length ? el('span', { className: 'badge badge-neutro' }, `${excecoes.length} exceção(ões)`) : null,
     alertas?.length ? el('span', { className: 'badge badge-reprovado' }, `${alertas.length} alerta(s)`) : null,
   ]);
@@ -374,7 +367,6 @@ function renderLinha(sub) {
     el('td', {}, metadata?.dre || '—'),
     el('td', {}, metadata?.curso || '—'),
     el('td', {}, criterios.length ? `${ok}/${criterios.length}` : '—'),
-    situacaoCell,
     statusCell,
     el('td', {}, linkDoc('boletim', 'Ver Boletim')),
     el('td', {}, linkDoc('boa', 'Ver BOA')),
@@ -424,8 +416,26 @@ async function carregarAutorizacoes() {
   }
 
   const corpo = autorizacoes.length
-    ? autorizacoes.map((a) =>
-        el('tr', { className: a.status === 'expirada' ? 'row-expirada' : '' }, [
+    ? autorizacoes.map((a) => {
+        const btnRevogar = a.status === 'vigente'
+          ? el('button', { className: 'btn btn-danger btn-sm', type: 'button' }, 'Revogar')
+          : null;
+        if (btnRevogar) {
+          btnRevogar.addEventListener('click', async () => {
+            const motivo = window.prompt('Motivo da revogação:');
+            if (!motivo) return;
+            try {
+              await api(`/api/comissao/submissoes/${a.id}/revogar`, {
+                method: 'POST',
+                body: { motivo },
+              });
+              await carregarAutorizacoes();
+            } catch (err) {
+              alert(err.message);
+            }
+          });
+        }
+        return el('tr', { className: a.status === 'expirada' ? 'row-expirada' : '' }, [
           el('td', {}, fmtData(a.liberadaEm)),
           el('td', {}, a.nome || '—'),
           el('td', {}, a.dre || '—'),
@@ -436,9 +446,10 @@ async function carregarAutorizacoes() {
           ]),
           el('td', {},
             `${fmtData(a.validaAte)}` + (a.status === 'vigente' ? ` (${a.diasParaVencer}d)` : '')),
-        ])
-      )
-    : [el('tr', {}, [el('td', { colspan: '5', className: 'text-muted' }, 'Nenhuma autorização emitida.')])];
+          el('td', {}, btnRevogar || '—'),
+        ]);
+      })
+    : [el('tr', {}, [el('td', { colspan: '6', className: 'text-muted' }, 'Nenhuma autorização emitida.')])];
 
   container.appendChild(
     el('div', { className: 'card table-container' }, [
@@ -450,6 +461,7 @@ async function carregarAutorizacoes() {
             el('th', { scope: 'col' }, 'DRE'),
             el('th', { scope: 'col' }, 'Status'),
             el('th', { scope: 'col' }, 'Validade'),
+            el('th', { scope: 'col' }, 'Ação'),
           ]),
         ]),
         el('tbody', {}, corpo),

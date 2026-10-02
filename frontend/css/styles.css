@@ -1448,6 +1448,9 @@ table .btn {
   border-radius: var(--radius-md);
   background-color: var(--bg-card);
   color: var(--text-primary);
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
   font-family: inherit;
   font-size: 0.95rem;
 }
@@ -1998,6 +2001,31 @@ p {
 
 .mesa-pdf-viewport {
   position: relative;
+}
+
+.mesa-rodape {
+  margin-top: var(--spacing-lg);
+  width: 100%;
+}
+
+.mesa-rodape .card {
+  max-width: 100%;
+}
+
+.mesa-disciplinas .accordion summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: var(--spacing-sm);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.mesa-disciplinas .accordion[open] summary {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.mesa-disciplinas .accordion > .table-container {
+  margin-top: var(--spacing-sm);
 }
 
 .btn-fechar-pdf-fullscreen {

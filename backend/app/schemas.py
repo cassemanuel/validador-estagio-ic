@@ -36,3 +36,7 @@ class DecisaoIn(BaseModel):
     decisao: Literal["aprovada", "indeferida", "devolvida"]
     motivo: str | None = Field(default=None, max_length=4000)
     excecoes: list[DecisaoExcecaoIn] = Field(default_factory=list)
+
+
+class RevogarIn(BaseModel):
+    motivo: str = Field(min_length=1, max_length=4000)

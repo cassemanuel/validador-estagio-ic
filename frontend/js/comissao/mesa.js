@@ -48,11 +48,17 @@ export async function abrirMesa(subId, onNavegar) {
     voltar,
   ]);
 
+  const { tabelaDisciplinas, evolucaoCR } = renderLadoDados(sub);
+
   mesa.appendChild(header);
   mesa.appendChild(el('div', { className: 'mesa' }, [
-    renderLadoPdf(sub),
-    renderLadoDados(sub),
+    el('div', { className: 'mesa-col' }, [
+      renderLadoPdf(sub),
+      tabelaDisciplinas,
+    ]),
+    renderLadoDados(sub).col,
   ]));
+  mesa.appendChild(el('div', { className: 'mesa-rodape' }, evolucaoCR));
 
   if (onNavegar) onNavegar();
 }
@@ -175,6 +181,8 @@ function contarCursos(metadata) {
 function renderLadoDados(sub) {
   const col = el('div', { className: 'mesa-col' }, [el('h3', {}, 'Dados extraídos')]);
   const { metadata, diagnostico, alertas, periodos } = sub;
+  const tabelaDisciplinas = renderTabelaDisciplinas(sub);
+  const evolucaoCR = renderEvolucaoCR(periodos);
 
   const periodoEstimado = estimarPeriodo(metadata?.ingresso);
   const qtdCursos = contarCursos(metadata);
@@ -231,12 +239,10 @@ function renderLadoDados(sub) {
     );
   }
 
-  col.appendChild(renderEvolucaoCR(periodos));
   col.appendChild(renderExcecoes(sub));
-  col.appendChild(renderTabelaDisciplinas(sub));
   col.appendChild(renderDeliberacao(sub));
 
-  return col;
+  return { col, tabelaDisciplinas, evolucaoCR };
 }
 
 function renderEvolucaoCR(periodos) {
@@ -289,6 +295,7 @@ function radioExcecao(excId, valor, rotulo) {
 }
 
 function renderTabelaDisciplinas(sub) {
+  const container = el('div', { className: 'card mesa-disciplinas' });
   const rows = [];
   (sub.periodos || []).forEach((p) => {
     (p.disciplinas || []).forEach((d) => {
@@ -307,24 +314,31 @@ function renderTabelaDisciplinas(sub) {
     });
   });
 
-  return el('div', { className: 'card' }, [
-    el('h4', {}, `Disciplinas (${rows.length})`),
-    el('div', { className: 'table-container mesa-tabela' }, [
-      el('table', {}, [
-        el('thead', {}, [
-          el('tr', {}, [
-            el('th', { scope: 'col' }, 'Período'),
-            el('th', { scope: 'col' }, 'Código'),
-            el('th', { scope: 'col' }, 'Disciplina'),
-            el('th', { scope: 'col' }, 'CrR'),
-            el('th', { scope: 'col' }, 'Grau'),
-            el('th', { scope: 'col' }, 'SF'),
+  const tabela = rows.length
+    ? el('div', { className: 'table-container mesa-tabela' }, [
+        el('table', {}, [
+          el('thead', {}, [
+            el('tr', {}, [
+              el('th', { scope: 'col' }, 'Período'),
+              el('th', { scope: 'col' }, 'Código'),
+              el('th', { scope: 'col' }, 'Disciplina'),
+              el('th', { scope: 'col' }, 'CrR'),
+              el('th', { scope: 'col' }, 'Grau'),
+              el('th', { scope: 'col' }, 'SF'),
+            ]),
           ]),
+          el('tbody', {}, rows),
         ]),
-        el('tbody', {}, rows),
-      ]),
-    ]),
-  ]);
+      ])
+    : el('p', { className: 'text-muted' }, 'Nenhuma disciplina extraída.');
+
+  container.appendChild(
+    el('details', { className: 'accordion' }, [
+      el('summary', {}, `Exibir lista completa de disciplinas (${rows.length})`),
+      tabela,
+    ])
+  );
+  return container;
 }
 
 function renderDeliberacao(sub) {
@@ -384,9 +398,28 @@ function renderDeliberacao(sub) {
     btn.addEventListener('click', () => decidir(decisao));
     return btn;
   };
-  botoes.appendChild(criarBotao('Aprovar', 'btn-primary', 'aprovada'));
-  botoes.appendChild(criarBotao('Indeferir', 'btn-danger', 'indeferida'));
-  botoes.appendChild(criarBotao('Devolver', 'btn-secondary', 'devolvida'));
+  if (sub.status === 'aprovada') {
+    const btnRevogar = el('button', { className: 'btn btn-danger', type: 'button' }, 'Revogar Autorização');
+    btnRevogar.addEventListener('click', async () => {
+      const motivo = window.prompt('Motivo da revogação:');
+      if (!motivo) return;
+      try {
+        await api(`/api/comissao/submissoes/${sub.id}/revogar`, {
+          method: 'POST',
+          body: { motivo },
+        });
+        navegarPara('/admin/autorizacoes');
+      } catch (err) {
+        erro.textContent = err.message;
+        erro.hidden = false;
+      }
+    });
+    botoes.appendChild(btnRevogar);
+  } else {
+    botoes.appendChild(criarBotao('Aprovar', 'btn-primary', 'aprovada'));
+    botoes.appendChild(criarBotao('Indeferir', 'btn-danger', 'indeferida'));
+    botoes.appendChild(criarBotao('Devolver', 'btn-secondary', 'devolvida'));
+  }
 
   return el('div', { className: 'card' }, [
     el('h4', {}, 'Deliberação'),

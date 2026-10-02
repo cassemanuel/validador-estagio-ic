@@ -201,10 +201,7 @@
         <p class="text-muted">Visão consolidada do fluxo de estágio.</p>
       </div>
       <div id="admin-metricas"></div>
-      <div class="dashboard-grid">
-        <div id="admin-auditoria-card" class="card"></div>
-        <div id="admin-alertas-card" class="card"></div>
-      </div>
+      <div id="admin-auditoria-card" class="card"></div>
     </section>
 
     <!-- ===== Admin: Fila de Triagem ===== -->
@@ -233,11 +230,10 @@
         <label class="fila-status-label" for="fila-status">Status:</label>
         <select id="fila-status" class="input-busca">
           <option value="todos" selected>Todas</option>
-          <option value="fila_regular">Em análise</option>
-          <option value="mesa_revisao">Em revisão</option>
+          <option value="fila_regular">Aguardando Análise</option>
+          <option value="mesa_revisao">Em Revisão</option>
           <option value="aprovada">Aprovadas</option>
           <option value="indeferida">Indeferidas</option>
-          <option value="devolvida">Devolvidas</option>
           <option value="cancelada">Canceladas</option>
         </select>
       </div>

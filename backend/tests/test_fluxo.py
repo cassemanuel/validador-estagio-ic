@@ -263,3 +263,46 @@ def test_minhas_submissoes_com_e_sem_decisao(client):
     assert sub1_resp["decisao"]["decisao"] == "aprovada"
     assert sub2_resp["status"] == "fila_regular"
     assert sub2_resp["decisao"] is None
+
+
+def test_revogacao_autorizacao(client):
+    from app.db import SessionLocal
+    from app.models import AuditLog, Submissao
+
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+
+    login(client, "comissao1", "comissao123")
+    client.post(
+        f"/api/comissao/submissoes/{sub['id']}/decisao",
+        json={"decisao": "aprovada", "motivo": "Apto", "excecoes": []},
+    )
+
+    resp = client.post(
+        f"/api/comissao/submissoes/{sub['id']}/revogar",
+        json={"motivo": "Erro material"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "revogada"
+
+    with SessionLocal() as db:
+        s = db.get(Submissao, sub["id"])
+        assert s.status == "revogada"
+        assert (
+            db.query(AuditLog)
+            .filter_by(acao="revogacao_autorizacao", entidade_id=sub["id"])
+            .count()
+            == 1
+        )
+
+
+def test_revogar_somente_aprovada(client):
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+
+    login(client, "comissao1", "comissao123")
+    resp = client.post(
+        f"/api/comissao/submissoes/{sub['id']}/revogar",
+        json={"motivo": "tentativa"},
+    )
+    assert resp.status_code == 409

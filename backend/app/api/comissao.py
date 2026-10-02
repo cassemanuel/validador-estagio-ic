@@ -12,7 +12,7 @@ from ..auth.jwt import require_comissao
 from ..config import settings
 from ..db import get_db
 from ..models import AuditLog, Decisao, Excecao, Submissao, Usuario
-from ..schemas import DecisaoIn
+from ..schemas import DecisaoIn, RevogarIn
 from ..services import crypto
 from ..services.auditoria import registrar
 from ..services.autorizacao import dados_autorizacao
@@ -295,6 +295,41 @@ def decidir(
         "submissao",
         sub.id,
         {"decisao": body.decisao, "motivo": body.motivo},
+    )
+    db.commit()
+    return {"ok": True, "status": sub.status}
+
+
+@router.post("/submissoes/{sub_id}/revogar")
+def revogar(
+    sub_id: int,
+    body: RevogarIn,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(require_comissao),
+):
+    """Revoga uma autorização previamente aprovada e invalida a licença."""
+    sub = _obter_submissao(db, sub_id)
+    if sub.status != "aprovada":
+        raise HTTPException(409, "Só é possível revogar processos aprovados.")
+
+    decisao = Decisao(
+        submissao_id=sub.id,
+        decisao="revogada",
+        motivo=body.motivo,
+        decidido_por=user.id,
+    )
+    db.add(decisao)
+
+    sub.status = "revogada"
+    sub.concluido_em = datetime.now(timezone.utc)
+
+    registrar(
+        db,
+        user,
+        "revogacao_autorizacao",
+        "submissao",
+        sub.id,
+        {"motivo": body.motivo},
     )
     db.commit()
     return {"ok": True, "status": sub.status}

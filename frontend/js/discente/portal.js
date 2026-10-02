@@ -82,8 +82,14 @@ export async function initPortal() {
   }
 
   const ativo = STATUS_ATIVOS.includes(submissao.status);
-  fluxoEl.hidden = ativo;
+  const autorizacaoBloqueante = isAutorizacaoBloqueante(submissao.autorizacao);
+  fluxoEl.hidden = ativo || autorizacaoBloqueante;
   renderStatus(statusEl, submissao);
+}
+
+function isAutorizacaoBloqueante(autorizacao) {
+  if (!autorizacao || autorizacao.expirada) return false;
+  return autorizacao.diasParaVencer > 30;
 }
 
 function resetUploadState() {
@@ -638,13 +644,18 @@ function renderStatus(container, sub) {
         : null,
       sub.autorizacao
         ? el('div', {
-            className: `card card-autorizacao ${sub.autorizacao.expirada ? 'card-aviso' : ''}`,
+            className: `card card-autorizacao ${sub.autorizacao.expirada || sub.autorizacao.diasParaVencer <= 30 ? 'card-aviso' : ''}`,
           }, [
             el('strong', {}, `Autorização de estágio ${sub.autorizacao.expirada ? 'expirada' : 'vigente'}`),
             el('p', {},
               `Liberada em ${new Date(sub.autorizacao.liberadaEm).toLocaleDateString('pt-BR')} · ` +
               `válida até ${new Date(sub.autorizacao.validaAte).toLocaleDateString('pt-BR')}` +
               (sub.autorizacao.expirada ? '' : ` (${sub.autorizacao.diasParaVencer} dias restantes)`)),
+            isAutorizacaoBloqueante(sub.autorizacao)
+              ? el('p', { className: 'card-aviso-texto' },
+                  `Você já possui uma autorização de estágio vigente até ${new Date(sub.autorizacao.validaAte).toLocaleDateString('pt-BR')}. ` +
+                  'A renovação só fica disponível 30 dias antes do vencimento.')
+              : null,
           ])
         : null,
       sub.status === 'devolvida'

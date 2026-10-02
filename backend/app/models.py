@@ -80,7 +80,7 @@ class Submissao(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('fila_regular','mesa_revisao','aprovada','indeferida','devolvida','cancelada')",
+            "status IN ('fila_regular','mesa_revisao','aprovada','indeferida','devolvida','cancelada','revogada')",
             name="ck_submissao_status",
         ),
     )
@@ -131,7 +131,7 @@ class Decisao(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "decisao IN ('aprovada','indeferida','devolvida')",
+            "decisao IN ('aprovada','indeferida','devolvida','revogada')",
             name="ck_decisao",
         ),
     )
