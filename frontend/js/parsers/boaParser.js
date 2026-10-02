@@ -48,7 +48,7 @@ const LAYOUT_CONFIG = {
   PADRAO_Y_CRED_RECOM: 277,
   PADRAO_Y_PER: 356,
   TOLERANCIA_LINHA: 10, // variação de Y aceitável para itens da mesma linha
-  MAX_COLUNA_DELTA: 6, // variação de X aceitável para itens da mesma coluna
+  MAX_COLUNA_DELTA: 4, // variação de X aceitável para itens da mesma coluna (estritamente <= 4px)
   ZONA_APROVADAS_OFFSET_Y: 20, // distância acima da linha "Cred" das aprovadas
   CREDITOS_PADRAO: 4.0, // CrR assumido quando a célula "Cred" não é legível
 };
@@ -232,16 +232,16 @@ export function extrairMetadataBOA(items) {
   if (!meta.nome) {
     // Títulos institucionais do cabeçalho não são nomes de pessoa.
     const naoNome =
-      /boletim|orienta|acad[eê]mica|ufrj|universidade|instituto|centro|p[áa]gina|emiss[ãa]o|gradua[çc][ãa]o|bacharelado/i;
-    const yMax = Math.max(...items.map((it) => it.y));
+      /boletim|orienta|acad[eê]mica|ufrj|universidade|instituto|centro|p[áa]gina|emiss[ãa]o|gradua[çc][ãa]o|bacharelado|curso|turno|forma[çc][ãa]o|sit\.|matr[íi]cula|vers[ãa]o|emiss[ãa]o/i;
+    const yMin = Math.min(...items.map((it) => it.y));
     const topo = items
       .filter(
         (it) =>
-          it.y > yMax - 120 &&
+          it.y < yMin + 150 &&
           NOME_REGEX.test(it.str.trim()) &&
           !naoNome.test(normalize(it.str))
       )
-      .sort((a, b) => b.y - a.y || a.x - b.x);
+      .sort((a, b) => a.y - b.y || a.x - b.x);
     if (topo.length) meta.nome = topo[0].str.trim();
   }
 
@@ -371,20 +371,17 @@ export function parsePaginaBOA(items, faixas) {
       }
       const codigo = codigos[0].str.trim();
 
-      // Status de pendência na coluna (linha de ocorrências).
-      const statusItem = ordenados.find((it) => detectarStatus(it.str));
-      if (!statusItem) {
-        console.debug(`[boaParser] ${codigo} descartada: sem status de pendência.`);
-        continue;
-      }
-      const status = detectarStatus(statusItem.str);
-
       // Aprovação/equivalência: qualquer código, grau ou conceito na zona
       // superior da coluna indica que a disciplina já foi cumprida.
+      // No BOA real do SIGA, disciplinas concluídas não têm status de
+      // pendência — só o registro na zona superior — então este teste vem
+      // antes da busca por status de pendência.
       const aprovado = ordenados.some(
         (it) =>
           it.y > approvalMinY &&
-          it !== statusItem &&
+          !isLabelLinha(it.str, 'cred') &&
+          !isLabelLinha(it.str, 'ch') &&
+          !isLabelLinha(it.str, 'grau') &&
           !detectarStatus(it.str) &&
           (isCodigoUFRJ(it.str) ||
             DECIMAL_REGEX.test(it.str) ||
@@ -395,19 +392,28 @@ export function parsePaginaBOA(items, faixas) {
         // (aprovação AP, aproveitamento T, grau) conta como CONCLUÍDA mesmo
         // quando o código cursado difere do recomendado — a equivalência é
         // resolvida depois pela lista `aceitos` ou pela comissão.
-        if (vistosCumpridos.has(codigo)) continue;
-        vistosCumpridos.add(codigo);
-        cumpridos.push({
-          codigo,
-          nome: ordenados.find((it) => !isCabecalhoOuLabel(it.str))?.str || codigo,
-          situacao: 'AP',
-          grau: null,
-          crR: LAYOUT_CONFIG.CREDITOS_PADRAO,
-          fonte: 'boa_coluna_cumprida',
-        });
-        console.debug(`[boaParser] ${codigo} concluída (zona de aprovadas).`);
+        if (!vistosCumpridos.has(codigo)) {
+          vistosCumpridos.add(codigo);
+          cumpridos.push({
+            codigo,
+            nome: ordenados.find((it) => !isCabecalhoOuLabel(it.str))?.str || codigo,
+            situacao: 'AP',
+            grau: null,
+            crR: LAYOUT_CONFIG.CREDITOS_PADRAO,
+            fonte: 'boa_coluna_cumprida',
+          });
+          console.debug(`[boaParser] ${codigo} concluída (zona de aprovadas).`);
+        }
         continue;
       }
+
+      // Status de pendência na coluna (linha de ocorrências).
+      const statusItem = ordenados.find((it) => detectarStatus(it.str));
+      if (!statusItem) {
+        console.debug(`[boaParser] ${codigo} descartada: sem status de pendência.`);
+        continue;
+      }
+      const status = detectarStatus(statusItem.str);
 
       // Período recomendado: inteiro na linha "Per" (define obrigatoriedade).
       const perItem = ordenados.find(

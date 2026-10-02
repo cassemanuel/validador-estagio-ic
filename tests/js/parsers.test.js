@@ -161,3 +161,37 @@ test('extrairMetadataBOA: fallback de DRE isolado e nome no topo', () => {
   assert.equal(meta.dre, '987654321');
   assert.equal(meta.nome, 'MARIA APARECIDA SOUZA');
 });
+
+// Layout real do SIGA: labels e valores estão em itens separados no topo da página.
+test('extrairMetadataBOA: nome e DRE em itens separados no topo (layout real BOA)', () => {
+  const items = [
+    { str: 'Aluno', x: 113, y: 22 },
+    { str: 'CASSIO EMANUEL FERREIRA DA SILVA', x: 123, y: 22 },
+    { str: 'Matrícula', x: 113, y: 362 },
+    { str: '120154812', x: 123, y: 362 },
+    { str: '85783 - Ciência da Computação', x: 90, y: 517 },
+  ];
+  const meta = extrairMetadataBOA(items);
+  assert.equal(meta.nome, 'CASSIO EMANUEL FERREIRA DA SILVA');
+  assert.equal(meta.dre, '120154812');
+  assert.equal(meta.curso, '85783 - Ciência da Computação');
+});
+
+test('coluna BOA concluída sem status de pendência gera cumprido', () => {
+  const itens = [
+    { str: 'ICP131', x: 100, y: 26 },
+    { str: 'Programação de Computadores I', x: 100, y: 78 },
+    { str: '4.0', x: 100, y: 279 },
+    { str: '60', x: 100, y: 319 },
+    { str: '1', x: 100, y: 358 },
+    { str: 'MAB120', x: 100, y: 386 }, // aprovação equivalente na zona superior
+  ];
+  const { obrigatorias, cumpridos, aprovadas } = parsePaginaBOA(itens, {
+    credRecomY: 277,
+    perY: 356,
+  });
+  assert.equal(obrigatorias.length, 0);
+  assert.deepEqual(cumpridos.map((c) => c.codigo), ['ICP131']);
+  const ap = aprovadas.find((a) => a.codigo === 'MAB120');
+  assert.ok(ap);
+});
