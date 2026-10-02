@@ -512,10 +512,13 @@ export function extrairResumoBOA(paginas) {
       // avalia-se cada uma e prefere-se a que tem.
       let faltante = exigido;
       for (const labelItem of rotulos) {
-        // Números à direita do rótulo, plausíveis como créditos do grupo —
-        // valores acima do teto (ex.: "320" horas de Extensão) são ignorados.
+        // Números da linha, plausíveis como créditos do grupo — valores
+        // acima do teto (ex.: "320" horas de Extensão) são ignorados.
+        // A tolerância de 20px à esquerda cobre rótulos longos como
+        // "Escolha Restrita Grupo Humanidades", cujo X pode invadir a
+        // primeira coluna numérica da tabela.
         const numericos = items
-          .filter((it) => it.x > labelItem.x)
+          .filter((it) => it.x >= labelItem.x - 20)
           .map((it) => ({ x: it.x, y: it.y, n: parseFloat(it.str) }))
           .filter((o) => !Number.isNaN(o.n) && o.n >= 0 && o.n <= exigido);
         if (!numericos.length) continue;

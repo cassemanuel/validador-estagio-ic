@@ -43,7 +43,7 @@ def init_db() -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
     models.Base.metadata.create_all(engine)
-    _migrar_schema_submissoes()
+    _migrar_schemas()
 
     # Provisiona usuários seed (SEED_USERS) e membros da comissão.
     with Session(engine) as db:
@@ -70,49 +70,70 @@ def init_db() -> None:
         db.commit()
 
 
-def _migrar_schema_submissoes() -> None:
-    """Reconstrói `submissoes` quando o schema é anterior ao modelo atual.
+def _recriar_tabela(cur, tabela, precisa_migrar) -> None:
+    """Recria `tabela` com o DDL atual do modelo quando `precisa_migrar`
+    (avaliado sobre o DDL e as colunas existentes) retorna True.
 
-    O SQLite não permite ALTER em CHECK constraints, então a tabela é
-    recriada (CREATE → INSERT colunas em comum → DROP → RENAME) quando:
-      - o CHECK de status não contempla 'arquivada', ou
-      - falta a coluna `status_anterior` (usada pelo desarquivamento).
+    O SQLite não permite ALTER em CHECK constraints nem em colunas, então
+    a tabela é reconstruída (CREATE → INSERT das colunas em comum →
+    DROP → RENAME) dentro de uma transação com foreign_keys desligado.
     """
+    ddl_atual = cur.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+        (tabela.name,),
+    ).fetchone()
+    if not ddl_atual:
+        return
+    ddl = ddl_atual[0] or ""
+    colunas_atuais = {
+        r[1] for r in cur.execute(f"PRAGMA table_info({tabela.name})")
+    }
+    if not precisa_migrar(ddl, colunas_atuais):
+        return
+
     from sqlalchemy.schema import CreateTable
 
-    from .models import Submissao
+    ddl_novo = str(CreateTable(tabela).compile(engine)).replace(
+        f"CREATE TABLE {tabela.name}",
+        f"CREATE TABLE {tabela.name}_nova",
+    )
+    comum = ", ".join(
+        c.name for c in tabela.columns if c.name in colunas_atuais
+    )
+    cur.execute(ddl_novo)
+    cur.execute(
+        f"INSERT INTO {tabela.name}_nova ({comum}) "
+        f"SELECT {comum} FROM {tabela.name}"
+    )
+    cur.execute(f"DROP TABLE {tabela.name}")
+    cur.execute(f"ALTER TABLE {tabela.name}_nova RENAME TO {tabela.name}")
+
+
+def _migrar_schemas() -> None:
+    """Reconstrói tabelas cujo schema gravado é anterior ao modelo atual.
+
+    - `submissoes`: CHECK de status sem 'arquivada' ou sem a coluna
+      `status_anterior` (usada pelo desarquivamento).
+    - `decisoes`: CHECK `ck_decisao` sem 'revogada' — sem a migração, a
+      revogação falha com IntegrityError (HTTP 500).
+    """
+    from .models import Decisao, Submissao
 
     raw = engine.raw_connection()
     try:
         cur = raw.cursor()
-        ddl_atual = cur.execute(
-            "SELECT sql FROM sqlite_master "
-            "WHERE type='table' AND name='submissoes'"
-        ).fetchone()
-        if not ddl_atual:
-            return
-        ddl = ddl_atual[0] or ""
-        colunas_atuais = {
-            r[1] for r in cur.execute("PRAGMA table_info(submissoes)")
-        }
-        if "'arquivada'" in ddl and "status_anterior" in colunas_atuais:
-            return
-
-        ddl_novo = str(CreateTable(Submissao.__table__).compile(engine))
-        ddl_novo = ddl_novo.replace(
-            "CREATE TABLE submissoes", "CREATE TABLE submissoes_nova"
-        )
-        colunas_novas = [c.name for c in Submissao.__table__.columns]
-        comum = ", ".join(c for c in colunas_novas if c in colunas_atuais)
-
         cur.execute("PRAGMA foreign_keys=OFF")
-        cur.execute(ddl_novo)
-        cur.execute(
-            f"INSERT INTO submissoes_nova ({comum}) "
-            f"SELECT {comum} FROM submissoes"
+        _recriar_tabela(
+            cur,
+            Submissao.__table__,
+            lambda ddl, cols: "'arquivada'" not in ddl
+            or "status_anterior" not in cols,
         )
-        cur.execute("DROP TABLE submissoes")
-        cur.execute("ALTER TABLE submissoes_nova RENAME TO submissoes")
+        _recriar_tabela(
+            cur,
+            Decisao.__table__,
+            lambda ddl, cols: "'revogada'" not in ddl,
+        )
         cur.execute("PRAGMA foreign_keys=ON")
         raw.commit()
     finally:

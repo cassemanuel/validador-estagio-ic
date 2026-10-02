@@ -12,7 +12,7 @@ import {
   formatNumberBR,
 } from '../ui/dom.js';
 import { renderSvgCrEvolution } from '../discente/portal.js';
-import { carregarPainel } from './painel.js';
+import { carregarPainel, dialogConfirmar } from './painel.js';
 import { navegarPara } from '../router.js';
 
 const TIPO_EXCECAO = {
@@ -411,7 +411,10 @@ function renderDeliberacao(sub) {
   if (sub.status === 'aprovada') {
     const btnRevogar = el('button', { className: 'btn btn-danger', type: 'button' }, 'Revogar Autorização');
     btnRevogar.addEventListener('click', async () => {
-      const motivo = window.prompt('Motivo da revogação:');
+      const motivo = await dialogConfirmar({
+        titulo: 'Revogar Autorização',
+        mensagem: 'Informe o motivo da revogação da autorização.',
+      });
       if (!motivo) return;
       try {
         await api(`/api/comissao/submissoes/${sub.id}/revogar`, {
@@ -432,7 +435,13 @@ function renderDeliberacao(sub) {
   } else if (STATUS_ARQUIVAVEIS.includes(sub.status)) {
     const btnArquivar = el('button', { className: 'btn btn-arquivar', type: 'button' }, 'Arquivar Processo');
     btnArquivar.addEventListener('click', async () => {
-      if (!window.confirm('Arquivar este processo? Ele sairá da fila ativa e das contagens do dashboard.')) return;
+      const ok = await dialogConfirmar({
+        titulo: 'Arquivar Processo',
+        mensagem: 'Arquivar este processo? Ele sairá da fila ativa e das contagens do dashboard.',
+        comMotivo: false,
+        labelOk: 'Arquivar',
+      });
+      if (!ok) return;
       try {
         await api(`/api/comissao/submissoes/${sub.id}/arquivar`, { method: 'POST' });
         navegarPara('/admin/fila');

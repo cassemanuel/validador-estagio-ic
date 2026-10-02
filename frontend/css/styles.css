@@ -1871,11 +1871,34 @@ table .btn {
 /* Cards de m�tricas interativos */
 .metric-value-destaque {
   font-weight: 800;
-  color: var(--cor-ic1);
+  color: #d97706;
 }
 
 [data-theme="dark"] .metric-value-destaque {
-  color: var(--cor-ic1-light);
+  color: #fbbf24;
+}
+
+.metric-card.metric-pendentes {
+  border: 2px solid #f59e0b;
+  background-color: rgba(245, 158, 11, 0.08);
+}
+
+#modal-confirmar-motivo {
+  width: 100%;
+  min-height: 80px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+}
+
+#modal-confirmar-motivo.input-erro {
+  border-color: var(--status-reprovado);
+  outline: 2px solid var(--status-reprovado);
 }
 
 .card-wip {

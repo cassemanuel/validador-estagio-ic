@@ -276,6 +276,20 @@ test('extrairResumoBOA: humanidades — usa a ocorrência do rótulo com número
   assert.equal(r.cumprido, 4);
 });
 
+test('extrairResumoBOA: humanidades — rótulo longo invade a coluna numérica', () => {
+  // O X do rótulo extenso fica depois do início da 1ª coluna de números;
+  // a tolerância de 20px à esquerda mantém os valores da linha.
+  const paginas = [[
+    { str: 'Escolha Restrita Grupo Humanidades', x: 250, y: 150 },
+    { str: '4.0', x: 240, y: 150 },
+    { str: '0.0', x: 300, y: 150 },
+  ]];
+  const { grupos } = extrairResumoBOA(paginas);
+  const r = grupos.find((g) => g.nome === 'escolha restrita');
+  assert.equal(r.faltante, 0);
+  assert.equal(r.cumprido, 4);
+});
+
 test('extrairResumoBOA: rótulo deslocado em Y ainda encontra a linha', () => {
   // Rótulo quebrado em duas linhas: o Y do texto difere do Y dos números.
   const paginas = [[

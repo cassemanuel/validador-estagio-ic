@@ -33,6 +33,63 @@ const ACAO_LABEL = {
 const fmtData = (iso) =>
   iso ? new Date(iso).toLocaleDateString('pt-BR') : '—';
 
+/**
+ * Modal de confirmação estilizado (substitui window.prompt/confirm/alert).
+ * @param {object} op
+ * @param {string} op.titulo Título do dialog.
+ * @param {string} [op.mensagem] Texto explicativo.
+ * @param {boolean} [op.comMotivo] Se true, exibe textarea de justificativa
+ *   e retorna o texto digitado; se false, retorna true/false.
+ * @param {string} [op.labelOk] Rótulo do botão de confirmação.
+ * @returns {Promise<string|boolean|null>} Texto do motivo, true (confirmado)
+ *   sem motivo, ou null (cancelado).
+ */
+export function dialogConfirmar({ titulo, mensagem, comMotivo = true, labelOk = 'Confirmar' }) {
+  const modal = document.getElementById('modal-confirmar');
+  const h2 = document.getElementById('modal-confirmar-titulo');
+  const msg = document.getElementById('modal-confirmar-msg');
+  const motivo = document.getElementById('modal-confirmar-motivo');
+  const btnOk = document.getElementById('modal-confirmar-ok');
+  const btnCancel = document.getElementById('modal-confirmar-cancel');
+  const btnFechar = document.getElementById('modal-confirmar-fechar');
+  if (!modal) return Promise.resolve(null);
+
+  h2.textContent = titulo;
+  msg.textContent = mensagem || '';
+  msg.hidden = !mensagem;
+  motivo.hidden = !comMotivo;
+  motivo.value = '';
+  motivo.classList.remove('input-erro');
+  motivo.oninput = () => motivo.classList.remove('input-erro');
+  btnOk.textContent = labelOk;
+
+  return new Promise((resolve) => {
+    const fechar = (valor) => {
+      modal.close();
+      resolve(valor);
+    };
+    btnOk.onclick = () => {
+      const texto = motivo.value.trim();
+      if (comMotivo && !texto) {
+        motivo.focus();
+        motivo.classList.add('input-erro');
+        return;
+      }
+      fechar(comMotivo ? texto : true);
+    };
+    btnCancel.onclick = () => fechar(null);
+    btnFechar.onclick = () => fechar(null);
+    modal.onclick = (e) => { if (e.target === modal) fechar(null); };
+    modal.showModal();
+    if (comMotivo) motivo.focus();
+  });
+}
+
+/** Modal de aviso (substitui window.alert). */
+export function dialogAviso(titulo, mensagem) {
+  return dialogConfirmar({ titulo, mensagem, comMotivo: false, labelOk: 'Entendi' });
+}
+
 export function initPainel(viewAtual = 'view-admin-dashboard') {
   initFilaTabs();
   initBuscaFila();
@@ -160,6 +217,7 @@ async function carregarMetricas() {
       label: 'Pendentes',
       valor: `${m.pendentes || 0}`,
       valorCls: 'metric-value-destaque',
+      cls: 'metric-pendentes',
       onClick: () => navegarPara('/admin/fila?tipo=revisao'),
       detalheNode: el('p', { className: 'text-muted metric-det' }, [
         chipFila('regular', 'regular', m.fila_regular || 0), ' ',
@@ -384,7 +442,7 @@ function renderLinha(sub) {
       await api(`/api/comissao/submissoes/${sub.id}/desarquivar`, { method: 'POST' });
       await carregarFila();
     } catch (err) {
-      alert(err.message);
+      dialogAviso('Falha ao desarquivar', err.message);
       btnDesarquivar.disabled = false;
     }
   });
@@ -499,7 +557,10 @@ async function carregarAutorizacoes() {
           : null;
         if (btnRevogar) {
           btnRevogar.addEventListener('click', async () => {
-            const motivo = window.prompt('Motivo da revogação:');
+            const motivo = await dialogConfirmar({
+              titulo: 'Revogar Autorização',
+              mensagem: `Informe o motivo da revogação da autorização de ${a.nome || '—'}.`,
+            });
             if (!motivo) return;
             try {
               await api(`/api/comissao/submissoes/${a.id}/revogar`, {
@@ -508,7 +569,7 @@ async function carregarAutorizacoes() {
               });
               await carregarAutorizacoes();
             } catch (err) {
-              alert(err.message);
+              await dialogAviso('Falha na revogação', err.message);
             }
           });
         }

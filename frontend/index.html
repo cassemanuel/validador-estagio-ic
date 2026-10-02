@@ -320,6 +320,31 @@
     </div>
   </footer>
 
+  <!-- Modal genérico de confirmação (motivo/aviso) -->
+  <dialog id="modal-confirmar" class="modal">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="modal-confirmar-titulo">Confirmar ação</h2>
+        <button type="button" id="modal-confirmar-fechar" class="btn-icon" aria-label="Fechar">
+          <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+      </header>
+      <div class="modal-body">
+        <p id="modal-confirmar-msg" class="text-muted"></p>
+        <textarea
+          id="modal-confirmar-motivo"
+          rows="3"
+          placeholder="Justificativa"
+          aria-label="Justificativa"
+        ></textarea>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" id="modal-confirmar-cancel" class="btn btn-secondary">Cancelar</button>
+        <button type="button" id="modal-confirmar-ok" class="btn btn-primary">Confirmar</button>
+      </footer>
+    </div>
+  </dialog>
+
   <!-- Modal "Sobre o Projeto" -->
   <dialog id="modal-sobre" class="modal">
     <div class="modal-content">
