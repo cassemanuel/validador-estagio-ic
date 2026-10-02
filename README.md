@@ -78,11 +78,30 @@ O painel administrativo possui **4 telas dedicadas**:
 - PDFs brutos ficam fora do banco (`data/uploads/`) e são **expurgados** após
   `PDF_RETENTION_DAYS` (padrão 30) da conclusão do processo — job periódico em
   `services/expurgo.py`.
+- **Criptografia em repouso:** antes de gravar em disco, cada PDF é cifrado
+  com Fernet (`cryptography`) e armazenado em `data/uploads/*.bin`. A chave
+  pode ser fornecida por `STORAGE_ENCRYPTION_KEY` no `.env` ou derivada do
+  `JWT_SECRET` via PBKDF2-HMAC-SHA256. O servidor decifra o arquivo em memória
+  apenas ao fazer stream para a mesa de curadoria.
 - `audit_log` registra logins, submissões, acessos aos PDFs, decisões e
   expurgos, sem guardar o documento nem dados pessoais além do necessário.
 - Hash chain sha256 garante integridade tamper-evident dos registros de auditoria.
 - Histórico do SIGA gera alerta automático (omite reprovações).
 - Dados tratados conforme a LGPD.
+
+### Armazenamento local e Docker
+
+O `docker-compose.yml` monta o diretório `data/` do host dentro do container:
+
+```yaml
+volumes:
+  - ./data:/app/data
+```
+
+Assim, o banco SQLite (`data/app.db`, `data/app.db-wal`, `data/app.db-shm`)
+e os PDFs cifrados (`data/uploads/*.bin`) persistem no servidor hospedeiro,
+mesmo após o container ser destruído. Para backup, basta copiar o diretório
+`data/`.
 
 ## Como rodar
 

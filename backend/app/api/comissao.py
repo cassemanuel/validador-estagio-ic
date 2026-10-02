@@ -84,22 +84,30 @@ def _obter_submissao(db: Session, sub_id: int) -> Submissao:
 
 @router.get("/fila")
 def fila(
-    tipo: str = Query("regular", pattern="^(regular|revisao|todos)$"),
+    tipo: str = Query("todos", pattern="^(regular|revisao|todos)$"),
+    status: str = Query("abertos", pattern="^(abertos|todos|fila_regular|mesa_revisao|aprovada|indeferida|devolvida|cancelada)$"),
     q: str = Query("", max_length=100),
     offset: int = Query(0, ge=0),
     limite: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     _=Depends(require_comissao),
 ):
-    """Fila unificada de triagem com busca por nome/DRE e paginação."""
-    status_map = {
-        "regular": ("fila_regular",),
-        "revisao": ("mesa_revisao",),
-        "todos": STATUS_ABERTOS,
-    }
-    status = status_map.get(tipo, ("fila_regular",))
+    """Fila unificada de triagem com busca por nome/DRE, status e paginação."""
+    if status == "todos":
+        status_set = None
+    elif status == "abertos":
+        tipo_map = {
+            "regular": ("fila_regular",),
+            "revisao": ("mesa_revisao",),
+            "todos": STATUS_ABERTOS,
+        }
+        status_set = tipo_map.get(tipo, STATUS_ABERTOS)
+    else:
+        status_set = (status,)
 
-    query = db.query(Submissao).filter(Submissao.status.in_(status))
+    query = db.query(Submissao)
+    if status_set is not None:
+        query = query.filter(Submissao.status.in_(status_set))
     if q:
         like = f"%{q}%"
         query = query.filter(

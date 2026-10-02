@@ -12,7 +12,8 @@ import { el, clearElement, formatNumberBR } from '../ui/dom.js';
 import { navegarPara } from '../router.js';
 import { abrirMesa } from './mesa.js';
 
-let filaParams = { tipo: 'todos', q: '', offset: 0, limite: 25 };
+let filaParams = { tipo: 'todos', status: 'abertos', q: '', offset: 0, limite: 25 };
+let filaCarregando = false;
 
 const ACAO_LABEL = {
   login: 'Login',
@@ -178,6 +179,13 @@ function initFilaTabs() {
       carregarFila();
     });
   });
+  const statusSelect = document.getElementById('fila-status');
+  if (statusSelect) {
+    statusSelect.addEventListener('change', () => {
+      filaParams = { ...filaParams, status: statusSelect.value, offset: 0 };
+      carregarFila();
+    });
+  }
 }
 
 function atualizarTabsFila(tipo) {
@@ -202,14 +210,21 @@ function initBuscaFila() {
 }
 
 export async function carregarFila() {
+  if (filaCarregando) return;
+  filaCarregando = true;
+
   const container = document.getElementById('admin-fila');
   const paginacao = document.getElementById('admin-paginacao');
   clearElement(container);
   clearElement(paginacao);
   atualizarTabsFila(filaParams.tipo);
 
+  const statusSelect = document.getElementById('fila-status');
+  if (statusSelect) statusSelect.value = filaParams.status;
+
   const query = new URLSearchParams({
     tipo: filaParams.tipo,
+    status: filaParams.status,
     q: filaParams.q,
     offset: String(filaParams.offset),
     limite: String(filaParams.limite),
@@ -222,6 +237,7 @@ export async function carregarFila() {
     container.appendChild(el('div', { className: 'card' }, [
       el('p', { className: 'text-muted' }, err.message || 'Erro ao carregar fila.'),
     ]));
+    filaCarregando = false;
     return;
   }
 
@@ -229,6 +245,7 @@ export async function carregarFila() {
     container.appendChild(el('div', { className: 'card' }, [
       el('p', { className: 'text-muted' }, 'Nenhum processo encontrado.'),
     ]));
+    filaCarregando = false;
     return;
   }
 
@@ -253,6 +270,7 @@ export async function carregarFila() {
   );
 
   renderPaginacao(resp.total, paginacao);
+  filaCarregando = false;
 }
 
 function renderLinha(sub) {

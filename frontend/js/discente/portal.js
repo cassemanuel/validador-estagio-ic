@@ -56,8 +56,16 @@ const STATUS_ATIVOS = ['fila_regular', 'mesa_revisao'];
 export async function initPortal() {
   const statusEl = document.getElementById('discente-status');
   const fluxoEl = document.getElementById('discente-fluxo');
+  const btnLimpar = document.getElementById('btn-limpar-documentos');
 
   initUploads();
+
+  btnLimpar?.addEventListener('click', () => {
+    resetUploadState();
+    clearElement(document.getElementById('discente-revisao'));
+    clearElement(document.getElementById('discente-analise'));
+    document.getElementById('discente-revisao').hidden = true;
+  });
 
   try {
     state.regras = await carregarRegras();
@@ -120,6 +128,41 @@ function setupDropzone(tipo) {
   });
 }
 
+function normalizarTexto(str) {
+  return String(str || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+}
+
+async function extrairTextoPaginas(pdfData, maxPaginas = 2) {
+  const pdf = await pdfjsLib.getDocument({ data: pdfData, isEvalSupported: false, useSystemFonts: true }).promise;
+  const partes = [];
+  for (let i = 1; i <= Math.min(maxPaginas, pdf.numPages); i += 1) {
+    const page = await pdf.getPage(i);
+    const text = await page.getTextContent();
+    partes.push(text.items.map((it) => it.str).join(' '));
+  }
+  return normalizarTexto(partes.join(' '));
+}
+
+async function validarTipoPDF(tipo, buffer) {
+  const texto = await extrairTextoPaginas(buffer, 2);
+  if (tipo === 'boletim') {
+    const contemBoa = texto.includes('ORIENTACAO ACADEMICA') || texto.includes('BOA ');
+    const contemBoletim = texto.includes('NAO OFICIAL');
+    if (contemBoa && !contemBoletim) {
+      throw new Error('Você anexou o BOA no campo do Boletim. Por favor, anexe o Boletim Não Oficial neste campo.');
+    }
+  } else if (tipo === 'boa') {
+    const contemBoletim = texto.includes('NAO OFICIAL') || texto.includes('HISTORICO ESCOLAR');
+    const contemBoa = texto.includes('ORIENTACAO ACADEMICA');
+    if (contemBoletim && !contemBoa) {
+      throw new Error('Você anexou o Boletim no campo do BOA.');
+    }
+  }
+}
+
 async function handleUpload(tipo, file, { progress, progressBar }) {
   const revisao = document.getElementById('discente-revisao');
   const analise = document.getElementById('discente-analise');
@@ -129,6 +172,8 @@ async function handleUpload(tipo, file, { progress, progressBar }) {
   try {
     await validatePdfFile(file);
     const buffer = await file.arrayBuffer();
+
+    await validarTipoPDF(tipo, buffer);
 
     if (tipo === 'boletim') {
       const historico = await processarPDF(buffer, (pct) => {
@@ -827,22 +872,52 @@ function renderDisciplinas(periodos) {
   return el('div', { className: 'card periodo-card' }, [header, body]);
 }
 
+function disciplinaAprovada(d) {
+  const sit = String(d.situacao || d.status || '').toUpperCase().trim();
+  return sit === 'AP' || sit === 'T' || sit === 'A' || sit === 'NCC' || sit === 'NCG';
+}
+
+function getOptativasCursadas(pendencias) {
+  const catalogo = new Set(
+    (pendencias.optativas || [])
+      .map((o) => String(o.codigo || '').trim().toUpperCase())
+      .filter(Boolean)
+  );
+  const vistos = new Set();
+  const resultado = [];
+  const adicionar = (codigo, nome) => {
+    const c = String(codigo || '').trim().toUpperCase();
+    if (!c || !catalogo.has(c) || vistos.has(c)) return;
+    vistos.add(c);
+    resultado.push({ codigo: c, nome: nome || c });
+  };
+
+  // Boletim: disciplinas aprovadas.
+  (state.boletim?.historico?.periodos || []).forEach((p) => {
+    (p.disciplinas || []).forEach((d) => {
+      if (disciplinaAprovada(d)) adicionar(d.codigo, d.nome);
+    });
+  });
+  // BOA: aprovadas/cumpridos da zona superior.
+  (state.boa?.dados?.aprovadas || []).forEach((d) => adicionar(d.codigo, d.nome));
+  (state.boa?.dados?.cumpridos || []).forEach((d) => adicionar(d, d));
+
+  return resultado;
+}
+
 function renderPendencias(pendencias) {
   const itemObr = (d) => el('li', {}, `${d.codigo || d.nome} — ${d.status || 'pendente'}`);
 
-  // Optativas: resumir em 11 slots.
-  const optativas = pendencias.optativas || [];
-  const preenchidas = optativas
-    .filter((d) => d.status && !/pendente|vedada/i.test(d.status))
-    .map((d) => `${d.codigo || ''} ${d.codigo ? '-' : ''} ${d.nome}`.trim());
+  // Optativas: resumir em 11 slots, preenchendo só com disciplinas JÁ CURSADAS/APROVADAS.
+  const cursadas = getOptativasCursadas(pendencias);
   const totalSlots = 11;
+  const faltam = Math.max(0, totalSlots - cursadas.length);
   const slots = [];
   for (let i = 1; i <= totalSlots; i += 1) {
-    const nome = preenchidas[i - 1];
-    if (nome) {
-      slots.push(el('li', { className: 'slot-preenchido' }, `${i}. ${nome}`));
+    const d = cursadas[i - 1];
+    if (d) {
+      slots.push(el('li', { className: 'slot-preenchido' }, `${i}. ${d.codigo} - ${d.nome}`));
     } else {
-      const faltam = Math.max(0, totalSlots - preenchidas.length);
       slots.push(el('li', { className: 'slot-vago' },
         `Slot ${i}: Pendente (Faltam ${faltam} eletiva${faltam === 1 ? '' : 's'} para integralizar)`));
     }
@@ -859,7 +934,7 @@ function renderPendencias(pendencias) {
             : [el('li', { className: 'text-muted' }, 'Nenhuma obrigatória pendente.')]),
       ]),
       el('div', {}, [
-        el('h4', {}, `Optativas/Eletivas (${preenchidas.length}/${totalSlots})`),
+        el('h4', {}, `Optativas/Eletivas (${cursadas.length}/${totalSlots})`),
         el('ol', { className: 'slots-eletivas' }, slots),
       ]),
     ]),

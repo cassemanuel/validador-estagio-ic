@@ -17,9 +17,9 @@
   />
 
   <!-- pdf.js vendored localmente (sem CDN) -->
-  <script src="vendor/pdfjs/pdf.min.js"></script>
+  <script src="/vendor/pdfjs/pdf.min.js"></script>
 
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body>
   <header class="app-header">
@@ -134,12 +134,17 @@
 
       <div id="discente-fluxo">
         <div class="panel-header">
-          <h2>Submeter Documentos para Validação de Estágio</h2>
-          <p class="text-muted">
-            Ambos os documentos são obrigatórios: o <strong>Boletim Não Oficial</strong>
-            traz o histórico de notas e CR, e o <strong>BOA</strong> traz a grade
-            curricular e as pendências do PPC 2022.
-          </p>
+          <div>
+            <h2>Submeter Documentos para Validação de Estágio</h2>
+            <p class="text-muted">
+              Ambos os documentos são obrigatórios: o <strong>Boletim Não Oficial</strong>
+              traz o histórico de notas e CR, e o <strong>BOA</strong> traz a grade
+              curricular e as pendências do PPC 2022.
+            </p>
+          </div>
+          <button type="button" id="btn-limpar-documentos" class="btn btn-secondary btn-sm">
+            <i class="bi bi-trash" aria-hidden="true"></i> Limpar Documentos
+          </button>
         </div>
 
         <div class="upload-grid">
@@ -212,22 +217,31 @@
       <nav class="app-nav segmented" aria-label="Filas da comissão">
         <button class="tab-btn active" data-fila="todos" type="button" aria-pressed="true">
           Todos
-          <span class="seg-badge" id="badge-todos" hidden></span>
+          <span class="seg-badge badge-neutro" id="badge-todos" hidden></span>
         </button>
         <button class="tab-btn" data-fila="regular" type="button" aria-pressed="false">
           <i class="bi bi-lightning-charge" aria-hidden="true"></i>
           Regulares
-          <span class="seg-badge" id="badge-regular" hidden></span>
+          <span class="seg-badge badge-ap" id="badge-regular" hidden></span>
         </button>
         <button class="tab-btn" data-fila="revisao" type="button" aria-pressed="false">
           <i class="bi bi-layout-split" aria-hidden="true"></i>
           Revisão
-          <span class="seg-badge" id="badge-revisao" hidden></span>
+          <span class="seg-badge badge-alerta" id="badge-revisao" hidden></span>
         </button>
       </nav>
 
       <div class="fila-toolbar">
         <input type="search" id="fila-busca" class="input-busca" placeholder="Buscar por nome ou DRE..." />
+        <label class="fila-status-label" for="fila-status">Status:</label>
+        <select id="fila-status" class="input-busca">
+          <option value="abertos">Em análise</option>
+          <option value="aprovada">Aprovadas</option>
+          <option value="indeferida">Indeferidas</option>
+          <option value="devolvida">Devolvidas</option>
+          <option value="cancelada">Canceladas</option>
+          <option value="todos">Todas</option>
+        </select>
       </div>
 
       <div id="admin-fila"></div>
@@ -298,6 +312,6 @@
     </div>
   </dialog>
 
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="/js/app.js"></script>
 </body>
 </html>
