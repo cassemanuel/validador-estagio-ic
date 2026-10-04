@@ -14,11 +14,11 @@ import {
   parseMetadata,
 } from '../../frontend/js/parsers/pdfParser.js';
 import {
-  calcularCreditosRestantes,
   extrairMetadataBOA,
   extrairResumoBOA,
   parsePaginaBOA,
 } from '../../frontend/js/parsers/boaParser.js';
+import { calcularProgressoIntegralizacao } from '../../frontend/js/discente/portal.js';
 import { calcularCRAcumulado } from '../../frontend/js/domain/cr.js';
 import { verificarElegibilidadeEstagio } from '../../frontend/js/rules/ppc2022.js';
 import regras from '../../frontend/rules/ciclo_basico.json' with { type: 'json' };
@@ -222,154 +222,36 @@ test('extrairMetadataBOA acumula cursos distintos no cabeçalho', () => {
   assert.equal(meta.cursos.length, 2);
 });
 
-// Resumo do BOA real: a coluna "Falta Cumprir" é o último número da linha.
-// Valores de C.H. (ex.: 320 horas de Extensão) não são créditos e devem
-// ser ignorados pelo teto de créditos do grupo.
-test('extrairResumoBOA: faltantes zerados implicam eletivas concluídas', () => {
+// O resumo do BOA ainda extrai as horas de Extensão (Normas 2025), mas
+// os créditos de Eletivas/Optativas passaram a ser calculados
+// deterministicamente a partir das disciplinas aprovadas no Boletim (SSOT).
+test('extrairResumoBOA: extrai apenas as horas de Extensão', () => {
   const paginas = [[
-    { str: 'Escolha condicionada', x: 10, y: 100 },
-    { str: '32.0', x: 200, y: 100 },
-    { str: '320', x: 230, y: 100 }, // C.H. de extensão — fora do teto
-    { str: '0.0', x: 260, y: 100 },
-    { str: 'Escolha Restrita - Grupo Humanidades', x: 10, y: 150 },
-    { str: '4.0', x: 200, y: 150 },
-    { str: '0.0', x: 260, y: 150 },
-    { str: 'Livre escolha', x: 10, y: 200 },
-    { str: '10.0', x: 200, y: 200 },
-    { str: '0.0', x: 260, y: 200 },
-  ]];
-
-  const { grupos, creditosFaltantes } = extrairResumoBOA(paginas);
-  assert.equal(grupos.length, 3);
-  assert.equal(creditosFaltantes, 0);
-  const cond = grupos.find((g) => g.nome === 'escolha condicionada');
-  assert.deepEqual(
-    { exigido: cond.exigido, cumprido: cond.cumprido, faltante: cond.faltante },
-    { exigido: 32, cumprido: 32, faltante: 0 }
-  );
-  const livre = grupos.find((g) => g.nome === 'livre escolha');
-  assert.deepEqual(
-    { exigido: livre.exigido, cumprido: livre.cumprido, faltante: livre.faltante },
-    { exigido: 8, cumprido: 8, faltante: 0 }
-  );
-});
-
-test('extrairResumoBOA: faltante > 0 é somado em creditosFaltantes', () => {
-  const paginas = [[
-    { str: 'Livre escolha', x: 10, y: 200 },
-    { str: '4.0', x: 200, y: 200 },
-    { str: '4.0', x: 260, y: 200 }, // faltante = último número da linha
-  ]];
-  const { creditosFaltantes } = extrairResumoBOA(paginas);
-  assert.equal(creditosFaltantes, 4);
-});
-
-test('extrairResumoBOA: humanidades — usa a ocorrência do rótulo com números', () => {
-  const paginas = [[
-    { str: 'Escolha Restrita - Grupo Humanidades', x: 10, y: 150 },
-    { str: '4.0', x: 200, y: 150 },
-    { str: '0.0', x: 260, y: 150 },
-  ]];
-  const { grupos } = extrairResumoBOA(paginas);
-  const r = grupos.find((g) => g.nome === 'escolha restrita');
-  assert.equal(r.exigido, 4);
-  assert.equal(r.faltante, 0);
-  assert.equal(r.cumprido, 4);
-});
-
-test('extrairResumoBOA: humanidades — rótulo longo invade a coluna numérica', () => {
-  // O X do rótulo extenso fica depois do início da 1ª coluna de números;
-  // a tolerância de 20px à esquerda mantém os valores da linha.
-  const paginas = [[
-    { str: 'Escolha Restrita Grupo Humanidades', x: 250, y: 150 },
-    { str: '4.0', x: 240, y: 150 },
-    { str: '0.0', x: 300, y: 150 },
-  ]];
-  const { grupos } = extrairResumoBOA(paginas);
-  const r = grupos.find((g) => g.nome === 'escolha restrita');
-  assert.equal(r.faltante, 0);
-  assert.equal(r.cumprido, 4);
-});
-
-test('extrairResumoBOA: extrai Obrigatórias, Extensão e grupos de eletivas', () => {
-  const paginas = [[
-    { str: 'Obrigatórias', x: 10, y: 80 },
-    { str: '300', x: 150, y: 80 },
-    { str: '120', x: 180, y: 80 },
-    { str: '120', x: 210, y: 80 },
-    { str: '0', x: 240, y: 80 },
-    { str: 'Escolha condicionada', x: 10, y: 100 },
-    { str: '32.0', x: 200, y: 100 },
-    { str: '0.0', x: 260, y: 100 },
-    { str: 'Livre escolha', x: 10, y: 120 },
-    { str: '8.0', x: 200, y: 120 },
-    { str: '0.0', x: 260, y: 120 },
-    { str: 'Escolha Restrita Grupo Humanidades', x: 10, y: 140 },
-    { str: '4.0', x: 200, y: 140 },
-    { str: '0.0', x: 260, y: 140 },
     { str: 'Extensão', x: 10, y: 160 },
     { str: '120', x: 180, y: 160 },
     { str: '80', x: 210, y: 160 },
     { str: '0', x: 270, y: 160 },
     { str: '40', x: 300, y: 160 },
   ]];
-  const { grupos, creditosFaltantes, extensao } = extrairResumoBOA(paginas);
-
-  const obr = grupos.find((g) => g.nome === 'obrigatorias');
-  assert.equal(obr.faltante, 0);
-  assert.equal(obr.cumprido, 120);
-
-  const r = grupos.find((g) => g.nome === 'escolha restrita');
-  assert.equal(r.faltante, 0);
-  assert.equal(r.cumprido, 4);
-
-  assert.equal(creditosFaltantes, 0);
-  assert.equal(extensao.cumpridas, 80);
-  assert.equal(extensao.faltantes, 40);
+  const resumo = extrairResumoBOA(paginas);
+  assert.deepEqual(resumo, {
+    extensao: { exigido: 120, cumpridas: 80, faltantes: 40 },
+  });
 });
 
-test('extrairResumoBOA: humanidades — linha real com C.H. e créditos', () => {
-  // Linha oficial do BOA: "Escolha Restrita Grupo Humanidades 60 4 4.0 60 0.0 0"
-  // — os 60 são C.H. (fora do teto de 4 créditos); o último número é o
-  // "Falta cumprir" = 0.
-  const paginas = [[
-    { str: 'Escolha Restrita Grupo Humanidades', x: 10, y: 150 },
-    { str: '60', x: 200, y: 150 },
-    { str: '4', x: 240, y: 150 },
-    { str: '4.0', x: 270, y: 150 },
-    { str: '60', x: 300, y: 150 },
-    { str: '0.0', x: 340, y: 150 },
-    { str: '0', x: 370, y: 150 },
-  ]];
-  const { grupos, creditosFaltantes } = extrairResumoBOA(paginas);
-  const r = grupos.find((g) => g.nome === 'escolha restrita');
-  assert.equal(r.faltante, 0);
-  assert.equal(r.cumprido, 4);
-  assert.equal(creditosFaltantes, 0);
-});
-
-test('calcularCreditosRestantes soma faltantes de obrigatórias e eletivas', () => {
-  const resumo = {
-    grupos: [
-      { nome: 'obrigatorias', faltante: 12 },
-      { nome: 'escolha condicionada', faltante: 4 },
-      { nome: 'escolha restrita', faltante: 0 },
-      { nome: 'livre escolha', faltante: 0 },
-    ],
-  };
-  assert.equal(calcularCreditosRestantes(resumo), 16);
-});
-
-test('extrairResumoBOA: rótulo deslocado em Y ainda encontra a linha', () => {
-  // Rótulo quebrado em duas linhas: o Y do texto difere do Y dos números.
-  const paginas = [[
-    { str: 'Escolha condicionada', x: 10, y: 90 },
-    { str: '32.0', x: 200, y: 100 },
-    { str: '0.0', x: 260, y: 100 },
-  ]];
-  const { grupos } = extrairResumoBOA(paginas);
-  const cond = grupos.find((g) => g.nome === 'escolha condicionada');
-  assert.equal(cond.faltante, 0);
+test('calcularProgressoIntegralizacao: créditos eletivos via Boletim (SSOT)', () => {
+  const periodos = [
+    {
+      periodo: '2023/1',
+      disciplinas: [
+        { codigo: 'ICP131', situacao: 'AP', crR: 4, grau: 8.0 },
+        { codigo: 'ICP241', situacao: 'AP', crR: 4, grau: 7.0 },
+      ],
+    },
+  ];
+  const progresso = calcularProgressoIntegralizacao(periodos, regras);
+  assert.equal(progresso.creditosEletivasCumpridos, 4);
+  assert.equal(progresso.faltantesEletivas, 40);
 });
 
 test('coluna BOA concluída sem status de pendência gera cumprido', () => {

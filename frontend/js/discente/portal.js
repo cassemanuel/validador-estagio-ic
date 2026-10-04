@@ -9,7 +9,7 @@
 
 import { api } from '../api/client.js';
 import { processarPDF } from '../parsers/pdfParser.js';
-import { calcularCreditosRestantes, processarBOA } from '../parsers/boaParser.js';
+import { processarBOA } from '../parsers/boaParser.js';
 import {
   calcularCRAcumulado,
   disciplinaConcluida,
@@ -1016,55 +1016,77 @@ function calcularCreditosEletivasPorBoletim(periodos, regras) {
   return total;
 }
 
+/**
+ * Calcula o progresso de integralização do curso a partir do Boletim
+ * (fonte única da verdade), unindo créditos obrigatórios pendentes e
+ * créditos de eletivas/optativas já cumpridos.
+ *
+ * @param {Array<object>} periodos
+ * @param {object} regras
+ * @returns {{
+ *   faltantesObrigatorias: number,
+ *   faltantesEletivas: number,
+ *   creditosEletivasCumpridos: number,
+ *   creditosRestantes: number,
+ *   obrigatoriasFaltantes: Array<object>
+ * }}
+ */
+export function calcularProgressoIntegralizacao(periodos, regras) {
+  const obrigatoriasFaltantes = disciplinasFaltantesCicloBasico(
+    { periodos },
+    regras
+  );
+  const faltantesObrigatorias = obrigatoriasFaltantes.reduce(
+    (s, r) => s + (Number(r.crR) || 4),
+    0
+  );
+  const creditosEletivasCumpridos = calcularCreditosEletivasPorBoletim(
+    periodos,
+    regras
+  );
+  const faltantesEletivas = Math.max(0, 44 - creditosEletivasCumpridos);
+
+  return {
+    faltantesObrigatorias,
+    faltantesEletivas,
+    creditosEletivasCumpridos,
+    creditosRestantes: faltantesObrigatorias + faltantesEletivas,
+    obrigatoriasFaltantes,
+  };
+}
+
 function renderPendencias(pendencias) {
   const formatarStatus = (status) =>
     STATUS_PENDENCIA[status] || (status ? String(status).replace(/_/g, ' ') : 'Pendente');
   const itemObr = (d) =>
     el('li', {}, `${d.codigo || d.nome} — ${formatarStatus(d.status)}`);
 
-  // Optativas: validação cruzada entre BOA e Boletim.
-  const resumo = state.boa?.dados?.resumo;
-  const totalCredExigidos = 44; // 32 + 8 + 4 conforme PPC 2022 / BOA
-  const creditosEletivasBoletim = calcularCreditosEletivasPorBoletim(
+  // Fonte única da verdade: Boletim (disciplinas aprovadas).
+  const progresso = calcularProgressoIntegralizacao(
     state.boletim?.historico?.periodos,
     state.regras
   );
-  const eletivasConcluidas =
-    resumo?.creditosFaltantes === 0 || creditosEletivasBoletim >= totalCredExigidos;
-  const faltantesCred = resumo?.creditosFaltantes ??
-    Math.max(0, totalCredExigidos - creditosEletivasBoletim);
-
-  const creditosRestantes = calcularCreditosRestantes(resumo);
+  const creditosEletivasCumpridos = progresso.creditosEletivasCumpridos;
+  const faltantesEletivas = progresso.faltantesEletivas;
+  const creditosRestantes = progresso.creditosRestantes;
 
   const renderOptativas = () => {
-    if (eletivasConcluidas) {
+    if (faltantesEletivas <= 0) {
       return el('div', { className: 'slot-preenchido' },
-        `Eletivas e Optativas Concluídas (${totalCredExigidos}/${totalCredExigidos} créditos)`);
+        `Eletivas e Optativas Concluídas (${creditosEletivasCumpridos}/44 créditos)`);
     }
-    const eletivas4 = Math.floor(faltantesCred / 4);
-    const resto = faltantesCred % 4;
-    const partes = [];
-    if (eletivas4 > 0) partes.push(`Faltam ${eletivas4} eletiva${eletivas4 === 1 ? '' : 's'} de 4 créditos`);
-    if (resto > 0) partes.push(`+ 1 eletiva de ${resto} crédito${resto === 1 ? '' : 's'}`);
-    const creditosTexto = partes.join('; ') || `Faltam ${faltantesCred} créditos`;
-    return el('div', { className: 'slot-vago' }, `${creditosTexto} (de ${totalCredExigidos} créditos exigidos)`);
+    return el('div', { className: 'slot-vago' },
+      `Faltam ${faltantesEletivas} créditos (Cumpridos: ${creditosEletivasCumpridos}/44)`);
   };
 
-  const ordemEletivas = ['escolha condicionada', 'escolha restrita', 'livre escolha'];
-  const labelEletiva = {
-    'escolha condicionada': 'Escolha condicionada',
-    'escolha restrita': 'Escolha restrita (Humanidades)',
-    'livre escolha': 'Livre escolha',
-  };
-  const totalEletivas = {
-    'escolha condicionada': 32,
-    'escolha restrita': 4,
-    'livre escolha': 8,
-  };
-  const gruposEletivos = ordemEletivas.map((nome) => {
-    const g = (resumo?.grupos || []).find((x) => x.nome === nome);
-    return g || { nome, exigido: totalEletivas[nome], cumprido: 0, faltante: totalEletivas[nome] };
-  });
+  const optativasCursadas = getOptativasCursadas(pendencias);
+  const listaOptativas = optativasCursadas.length
+    ? el('ul', { className: 'optativas-lista' },
+        optativasCursadas.map((d) =>
+          el('li', {},
+            `${d.codigo} — ${d.nome}${d.grau ? ` (${d.grau})` : ''}`)
+        ))
+    : el('p', { className: 'text-muted' }, 'Nenhuma optativa/eletiva detectada.');
 
   const cardPendencias = el('div', { className: 'card' }, [
     el('h3', {}, 'Pendências detectadas (BOA)'),
@@ -1079,38 +1101,30 @@ function renderPendencias(pendencias) {
       el('div', {}, [
         el('h4', {}, 'Optativas/Eletivas'),
         renderOptativas(),
-        el('ul', { className: 'slots-eletivas' },
-          gruposEletivos.map((g) =>
-            el('li', { className: g.faltante <= 0 ? 'slot-preenchido' : 'slot-vago' },
-              `${labelEletiva[g.nome]}: ${g.cumprido}/${g.exigido} créditos`)
-          )),
+        listaOptativas,
       ]),
     ]),
   ]);
 
-  const cardJornada = creditosRestantes != null
-    ? el('div', { className: 'card card-jornada-info' }, [
-        el('strong', {}, 'Jornada de Estágio Permitida (Normas 2025 - Art. 2º):'),
-        el('div', {}, [
-          el('span', {}, 'Créditos restantes para conclusão do curso: '),
-          el('strong', {}, String(creditosRestantes)),
-          ' ',
-          el('span', {
-            className: `badge ${creditosRestantes <= 10 ? 'badge-ap' : 'badge-cursando'}`,
-          }, creditosRestantes <= 10
-            ? 'Elegível para até 30h semanais'
-            : 'Carga horária máxima: 20h semanais'),
-        ]),
-        el('p', { className: 'text-muted jornada-ajuda' },
-          creditosRestantes <= 10
-            ? 'Autorização de 30h permitida por até 6 meses (Art. 2º, §1º).'
-            : 'Estágios de 30h só são permitidos quando faltarem no máximo 10 créditos para conclusão.'),
-      ])
-    : null;
+  const cardJornada = el('div', { className: 'card card-jornada-info' }, [
+    el('strong', {}, 'Jornada de Estágio Permitida (Normas 2025 - Art. 2º):'),
+    el('div', {}, [
+      el('span', {}, 'Créditos restantes para conclusão do curso: '),
+      el('strong', {}, String(creditosRestantes)),
+      ' ',
+      el('span', {
+        className: `badge ${creditosRestantes <= 10 ? 'badge-ap' : 'badge-cursando'}`,
+      }, creditosRestantes <= 10
+        ? 'Elegível para até 30h semanais'
+        : 'Carga horária máxima: 20h semanais'),
+    ]),
+    el('p', { className: 'text-muted jornada-ajuda' },
+      creditosRestantes <= 10
+        ? 'Autorização de 30h permitida por até 6 meses (Art. 2º, §1º).'
+        : 'Estágios de 30h só são permitidos quando faltarem no máximo 10 créditos para conclusão.'),
+  ]);
 
-  return cardJornada
-    ? el('div', {}, [cardPendencias, cardJornada])
-    : cardPendencias;
+  return el('div', {}, [cardPendencias, cardJornada]);
 }
 
 function renderDiagnostico({ apto, criterios }) {

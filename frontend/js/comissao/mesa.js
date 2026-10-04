@@ -11,9 +11,12 @@ import {
   clearElement,
   formatNumberBR,
 } from '../ui/dom.js';
-import { renderSvgCrEvolution } from '../discente/portal.js';
-import { calcularCreditosRestantes } from '../parsers/boaParser.js';
+import {
+  calcularProgressoIntegralizacao,
+  renderSvgCrEvolution,
+} from '../discente/portal.js';
 import { carregarPainel, dialogConfirmar } from './painel.js';
+import { carregarRegras } from '../rules/ppc2022.js';
 import { navegarPara } from '../router.js';
 
 const TIPO_EXCECAO = {
@@ -48,7 +51,8 @@ export async function abrirMesa(subId, docInicial = 'boletim') {
     voltar,
   ]);
 
-  const { col, tabelaDisciplinas, evolucaoCR } = renderLadoDados(sub);
+  const regras = await carregarRegras();
+  const { col, tabelaDisciplinas, evolucaoCR } = renderLadoDados(sub, regras);
 
   mesa.appendChild(header);
   mesa.appendChild(el('div', { className: 'mesa' }, [
@@ -185,7 +189,7 @@ function contarCursos(metadata) {
   return codigos.size;
 }
 
-function renderLadoDados(sub) {
+function renderLadoDados(sub, regras) {
   const col = el('div', { className: 'mesa-col' }, [el('h3', {}, 'Dados extraídos')]);
   const { metadata, diagnostico, alertas, periodos } = sub;
   const tabelaDisciplinas = renderTabelaDisciplinas(sub);
@@ -246,23 +250,24 @@ function renderLadoDados(sub) {
     );
   }
 
-  const creditosRestantes = calcularCreditosRestantes(sub.resumoBoa);
-  if (creditosRestantes != null) {
-    const badge30h = creditosRestantes <= 10
-      ? el('span', { className: 'badge badge-ap' }, 'Elegível para estágio de 30h')
-      : el('span', { className: 'badge badge-cursando' }, 'Limitado a 20h semanais');
-    col.appendChild(
-      el('div', { className: 'card' }, [
-        el('h4', {}, 'Integralização do curso'),
-        el('p', {}, [
-          el('strong', {}, 'Créditos restantes para formatura: '),
-          String(creditosRestantes),
-          ' ',
-          badge30h,
-        ]),
-      ])
-    );
-  }
+  const progresso = calcularProgressoIntegralizacao(
+    sub.periodos,
+    regras
+  );
+  const badge30h = progresso.creditosRestantes <= 10
+    ? el('span', { className: 'badge badge-ap' }, 'Elegível para estágio de 30h')
+    : el('span', { className: 'badge badge-cursando' }, 'Limitado a 20h semanais');
+  col.appendChild(
+    el('div', { className: 'card' }, [
+      el('h4', {}, 'Integralização do curso'),
+      el('p', {}, [
+        el('strong', {}, 'Créditos restantes para formatura: '),
+        String(progresso.creditosRestantes),
+        ' ',
+        badge30h,
+      ]),
+    ])
+  );
 
   col.appendChild(renderExcecoes(sub));
   col.appendChild(renderDeliberacao(sub));

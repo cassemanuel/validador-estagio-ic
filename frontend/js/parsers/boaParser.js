@@ -458,110 +458,20 @@ export function parsePaginaBOA(items, faixas) {
   return { obrigatorias, optativas, aprovadas, cumpridos, credRecomY, perY };
 }
 
+const RESUMO_TOLERANCIA_Y = 18; // tolerância vertical entre rótulo e células da linha
+
 /**
- * Extrai, do quadro de Resumo do BOA, os créditos exigidos e faltantes
- * dos grupos de eletivas/optativas.
+ * Extrai, do quadro de Resumo do BOA, apenas as informações que ainda
+ * precisam ser lidas diretamente do PDF: a carga horária de Extensão.
  *
- * Procura rótulos como "Escolha Condicionada", "Livre Escolha",
- * "Escolha Restrita" e valores decimais nas colunas de créditos.
- * Retorna objeto com total de créditos exigidos e faltantes.
+ * Os créditos de Eletivas/Optativas passaram a ser calculados de forma
+ * determinística a partir das disciplinas aprovadas no Boletim (SSOT),
+ * eliminando a raspagem frágil por coordenadas dos subgrupos do Resumo.
  *
  * @param {Array<Array<{str:string, x:number, y:number}>>} paginas
- * @returns {{grupos: Array<{nome: string, exigido: number, cumprido: number, faltante: number}>, creditosFaltantes: number}}
+ * @returns {{extensao: {exigido: number, cumpridas: number, faltantes: number}}}
  */
-// Créditos exigidos por grupo de eletivas/optativas (PPC 2022 — BCC).
-// Os totais são fixos: o quadro de Resumo do BOA também lista C.H./horas
-// (ex.: 320h de Extensão), que não devem ser confundidas com créditos.
-// Para Obrigatórias, os valores são extraídos da própria linha do Resumo.
-const CREDITOS_EXIGIDOS = {
-  'obrigatorias': 1000, // teto alto para não descartar C.H. (colunas exigida/cumprida/falta)
-  'escolha condicionada': 32,
-  'livre escolha': 8,
-  'escolha restrita': 4,
-};
-
 export function extrairResumoBOA(paginas) {
-  const nomes = [
-    ['obrigatorias', /obrigat[oó]rias/i],
-    ['escolha condicionada', /escolha\s+condicionada/i],
-    ['livre escolha', /livre\s+escolha/i],
-    ['escolha restrita', /escolha\s+restrita|humanidades/i],
-  ];
-
-  const grupos = [];
-  let creditosFaltantes = 0;
-  const RESUMO_TOLERANCIA_Y = 18; // tolerância vertical entre rótulo e células da linha
-
-  for (const items of paginas) {
-    const escolhidos = [];
-    for (const [nomePadrao, regex] of nomes) {
-      if (grupos.find((g) => g.nome === nomePadrao)) continue;
-
-      const exigidoFixo = CREDITOS_EXIGIDOS[nomePadrao];
-      let rotulos = items.filter((it) => regex.test(normalize(it.str)));
-      if (!rotulos.length) continue;
-
-      // O rótulo do grupo pode aparecer mais de uma vez na página (legenda,
-      // grade de pendências, quadro de resumo). As linhas do resumo ficam
-      // agrupadas — prefere-se a ocorrência mais próxima dos outros grupos.
-      if (rotulos.length > 1 && escolhidos.length) {
-        rotulos = [...rotulos].sort(
-          (a, b) =>
-            Math.min(...escolhidos.map((x) => Math.abs(a.y - x.y))) -
-            Math.min(...escolhidos.map((x) => Math.abs(b.y - x.y)))
-        );
-      }
-
-      let faltante = exigidoFixo;
-      let exigido = exigidoFixo;
-      let cumprido = 0;
-      let encontrado = false;
-      for (const labelItem of rotulos) {
-        // Células numéricas da mesma linha do rótulo (dentro da tolerância
-        // vertical). Descarta valores acima do teto (ex.: C.H. "320" ou
-        // horas de extensão) para evitar confundir com créditos.
-        const candidatos = items
-          .map((it) => ({ x: it.x, y: it.y, n: parseFloat(it.str) }))
-          .filter(
-            (o) =>
-              !Number.isNaN(o.n) &&
-              o.n >= 0 &&
-              o.n <= exigidoFixo &&
-              Math.abs(o.y - labelItem.y) <= RESUMO_TOLERANCIA_Y
-          );
-        if (!candidatos.length) continue;
-
-        // Ordena da esquerda para a direita: a coluna "Falta cumprir"
-        // é a última do quadro de Resumo do SIGA.
-        candidatos.sort((a, b) => a.x - b.x);
-        const ultimoNumero = candidatos[candidatos.length - 1].n;
-
-        if (nomePadrao === 'obrigatorias') {
-          // Para Obrigatórias, as colunas finais são Créd. Cumpridos e Falta.
-          const prev =
-            candidatos.length >= 2
-              ? candidatos[candidatos.length - 2].n
-              : 0;
-          faltante = ultimoNumero;
-          cumprido = prev;
-          exigido = cumprido + faltante;
-        } else {
-          faltante = ultimoNumero;
-          cumprido = Math.max(0, exigido - faltante);
-        }
-        encontrado = true;
-        escolhidos.push(labelItem);
-        break;
-      }
-
-      if (!encontrado) continue;
-      grupos.push({ nome: nomePadrao, exigido, cumprido, faltante });
-      if (nomePadrao !== 'obrigatorias') {
-        creditosFaltantes += faltante;
-      }
-    }
-  }
-
   // Extensão (Art. 4º, IV das Normas 2025): linha abaixo de "Livre escolha".
   // Colunas esperadas: Exigido | Cumprido | Aproveitado | Falta — a segunda
   // coluna são as horas cumpridas e a última as horas faltantes.
@@ -586,32 +496,13 @@ export function extrairResumoBOA(paginas) {
     }
   }
 
-  return { grupos, creditosFaltantes, extensao };
-}
-
-/**
- * Soma os créditos ainda faltantes para a integralização do curso
- * (Obrigatórias + Eletivas), usada para decidir o limite semanal de estágio.
- * @param {{grupos?: Array<{nome: string, faltante: number}>}} resumo
- * @returns {number|null}
- */
-export function calcularCreditosRestantes(resumo) {
-  if (!resumo?.grupos) return null;
-  const nomes = [
-    'obrigatorias',
-    'escolha condicionada',
-    'escolha restrita',
-    'livre escolha',
-  ];
-  return resumo.grupos
-    .filter((g) => nomes.includes(g.nome))
-    .reduce((s, g) => s + (Number(g.faltante) || 0), 0);
+  return { extensao };
 }
 
 /**
  * Processa um arquivo BOA e retorna pendências e disciplinas aprovadas.
  * @param {ArrayBuffer | Uint8Array} pdfData
- * @returns {Promise<{obrigatorias: Array<object>, optativas: Array<object>, aprovadas: Array<object>, cumpridos: Array<object>, resumo: object, metadata: object}>}
+ * @returns {Promise<{obrigatorias: Array<object>, optativas: Array<object>, aprovadas: Array<object>, cumpridos: Array<object>, resumo: {extensao: object}, metadata: object}>}
  */
 export async function processarBOA(pdfData, pdfjsLib) {
   const paginas = await extractBOAItems(pdfData, pdfjsLib);
