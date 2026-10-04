@@ -834,7 +834,7 @@ function abrirFormExcecao(req, lista, redesenhar) {
     el('option', { value: 'equivalencia' }, 'Equivalência'),
     el('option', { value: 'aproveitamento' }, 'Aproveitamento'),
     el('option', { value: 'dispensa' }, 'Dispensa'),
-    el('option', { value: 'acordo' }, 'Solicitar Acordo'),
+    el('option', { value: 'acordo' }, 'Solicitar Acordo (cursar e concluir no semestre corrente)'),
   ]);
   const ajudaTipo = el('p', { className: 'text-muted excecao-ajuda' });
   tipo.addEventListener('change', () => {

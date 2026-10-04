@@ -34,12 +34,7 @@ const fmtData = (iso) =>
   iso ? new Date(iso).toLocaleDateString('pt-BR') : '—';
 
 const fmtDataHora = (iso) =>
-  iso
-    ? new Date(iso).toLocaleString('pt-BR', {
-        dateStyle: 'short',
-        timeStyle: 'medium',
-      })
-    : '—';
+  iso ? new Date(iso).toLocaleString('pt-BR') : '—';
 
 /**
  * Modal de confirmação estilizado (substitui window.prompt/confirm/alert).

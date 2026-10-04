@@ -490,8 +490,7 @@ export function extrairResumoBOA(paginas) {
 
   const grupos = [];
   let creditosFaltantes = 0;
-  const RESUMO_TOLERANCIA_Y = 30; // janela para achar a linha do rótulo no SIGA
-  const CLUSTER_Y = 5;           // agrupa células numericamente próximas em Y
+  const RESUMO_TOLERANCIA_Y = 18; // tolerância vertical entre rótulo e células da linha
 
   for (const items of paginas) {
     const escolhidos = [];
@@ -513,62 +512,49 @@ export function extrairResumoBOA(paginas) {
         );
       }
 
-      // Só a ocorrência da tabela de resumo tem números à direita —
-      // avalia-se cada uma e prefere-se a que tem.
       let faltante = exigidoFixo;
       let exigido = exigidoFixo;
       let cumprido = 0;
+      let encontrado = false;
       for (const labelItem of rotulos) {
-        // Números da linha, plausíveis como créditos do grupo — valores
-        // acima do teto (ex.: "320" de C.H.) são ignorados; Obrigatórias
-        // têm teto alto porque incluem C.H. total do curso.
+        // Células numéricas da mesma linha do rótulo (dentro da tolerância
+        // vertical). Descarta valores acima do teto (ex.: C.H. "320" ou
+        // horas de extensão) para evitar confundir com créditos.
         const candidatos = items
           .map((it) => ({ x: it.x, y: it.y, n: parseFloat(it.str) }))
-          .filter((o) => !Number.isNaN(o.n) && o.n >= 0 && o.n <= exigidoFixo);
+          .filter(
+            (o) =>
+              !Number.isNaN(o.n) &&
+              o.n >= 0 &&
+              o.n <= exigidoFixo &&
+              Math.abs(o.y - labelItem.y) <= RESUMO_TOLERANCIA_Y
+          );
+        if (!candidatos.length) continue;
 
-        // A linha do grupo é a faixa numérica mais próxima do rótulo. Usamos
-        // agrupamento por Y para tolerar células levemente desalinhadas sem
-        // misturar com as outras linhas do quadro de Resumo.
-        const proximos = candidatos.filter(
-          (o) => Math.abs(o.y - labelItem.y) <= RESUMO_TOLERANCIA_Y
-        );
-        const clusters = new Map();
-        for (const o of proximos) {
-          const key = Math.round(o.y / CLUSTER_Y) * CLUSTER_Y;
-          if (!clusters.has(key)) clusters.set(key, []);
-          clusters.get(key).push(o);
-        }
-        const linha = [...clusters.entries()]
-          .sort(
-            (a, b) =>
-              Math.abs(a[0] - labelItem.y) - Math.abs(b[0] - labelItem.y)
-          )[0]?.[1]
-          .sort((a, b) => a.x - b.x);
-        if (!linha.length) continue;
+        // Ordena da esquerda para a direita: a coluna "Falta cumprir"
+        // é a última do quadro de Resumo do SIGA.
+        candidatos.sort((a, b) => a.x - b.x);
+        const ultimoNumero = candidatos[candidatos.length - 1].n;
 
-        // "Falta Cumprir" é a última coluna numérica da linha. Prefere-se
-        // números à direita do rótulo (tolerância de 20px cobre rótulos
-        // longos como "Escolha Restrita Grupo Humanidades", cujo X invade
-        // a 1ª coluna); sem eles, aceita o último número da linha.
-        const direita = linha.filter((o) => o.x >= labelItem.x - 20);
-        const alvo = direita.length ? direita : linha;
-
-        const last = alvo[alvo.length - 1].n;
         if (nomePadrao === 'obrigatorias') {
-          // Para Obrigatórias, "Créd. Cumpridos" é o penúltimo número e
-          // "Falta Cumprir" é o último. Exigido = cumprido + faltante.
-          const prev = alvo.length >= 2 ? alvo[alvo.length - 2].n : 0;
-          faltante = last;
+          // Para Obrigatórias, as colunas finais são Créd. Cumpridos e Falta.
+          const prev =
+            candidatos.length >= 2
+              ? candidatos[candidatos.length - 2].n
+              : 0;
+          faltante = ultimoNumero;
           cumprido = prev;
           exigido = cumprido + faltante;
         } else {
-          faltante = last;
+          faltante = ultimoNumero;
           cumprido = Math.max(0, exigido - faltante);
         }
+        encontrado = true;
         escolhidos.push(labelItem);
         break;
       }
 
+      if (!encontrado) continue;
       grupos.push({ nome: nomePadrao, exigido, cumprido, faltante });
       if (nomePadrao !== 'obrigatorias') {
         creditosFaltantes += faltante;
@@ -585,25 +571,16 @@ export function extrairResumoBOA(paginas) {
     for (const labelItem of rotulos) {
       const candidatos = items
         .map((it) => ({ x: it.x, y: it.y, n: parseFloat(it.str) }))
-        .filter((o) => !Number.isNaN(o.n) && o.n >= 0 && o.n <= 10000);
-      const proximos = candidatos.filter(
-        (o) => Math.abs(o.y - labelItem.y) <= RESUMO_TOLERANCIA_Y
-      );
-      const clusters = new Map();
-      for (const o of proximos) {
-        const key = Math.round(o.y / CLUSTER_Y) * CLUSTER_Y;
-        if (!clusters.has(key)) clusters.set(key, []);
-        clusters.get(key).push(o);
-      }
-      const linha = [...clusters.entries()]
-        .sort(
-          (a, b) =>
-            Math.abs(a[0] - labelItem.y) - Math.abs(b[0] - labelItem.y)
-        )[0]?.[1]
-        .sort((a, b) => a.x - b.x);
-      if (linha.length >= 2) {
-        extensao.cumpridas = linha[1].n;
-        extensao.faltantes = linha[linha.length - 1].n;
+        .filter(
+          (o) =>
+            !Number.isNaN(o.n) &&
+            o.n >= 0 &&
+            Math.abs(o.y - labelItem.y) <= RESUMO_TOLERANCIA_Y
+        );
+      if (candidatos.length >= 2) {
+        candidatos.sort((a, b) => a.x - b.x);
+        extensao.cumpridas = candidatos[1].n;
+        extensao.faltantes = candidatos[candidatos.length - 1].n;
         break;
       }
     }

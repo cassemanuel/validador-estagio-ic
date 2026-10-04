@@ -1506,17 +1506,17 @@ table .btn {
   font-size: 0.95rem;
 }
 
-.excecao-form textarea,
-.mesa-col textarea {
-  min-height: 120px;
-  resize: vertical;
-}
-
 .excecao-form input,
 .excecao-form select {
-  height: 42px;
-  min-height: 42px;
+  height: 42px !important;
+  min-height: 42px !important;
   padding: 8px 12px;
+}
+
+.excecao-form textarea,
+.mesa-col textarea {
+  min-height: 120px !important;
+  resize: vertical;
 }
 
 .excecao-ajuda {
