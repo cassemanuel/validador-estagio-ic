@@ -139,8 +139,11 @@ export function parseNumberBR(value) {
  * @returns {string}
  */
 export function formatNumberBR(value, decimals = 1) {
-  if (value === null || value === undefined || isNaN(value)) return '0,0'.padEnd(decimals + 2, '0');
-  return Number(value).toLocaleString('pt-BR', {
+  const n = Number(value);
+  if (value === null || value === undefined || Number.isNaN(n)) {
+    return '0,0'.padEnd(decimals + 2, '0');
+  }
+  return n.toLocaleString('pt-BR', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });

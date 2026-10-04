@@ -275,7 +275,7 @@ export function parsePaginaBOA(items, faixas) {
   const perLabelY = items.find((it) => isLabelLinha(it.str, 'per'))?.y;
 
   if (credLabelYs.length) credRecomY = Math.min(...credLabelYs);
-  if (perLabelY != null) perY = perLabelY;
+  if (perLabelY !== null && perLabelY !== undefined) perY = perLabelY;
 
   // Tudo acima da linha de cred do elenco recomendado pertence à zona de
   // atividades já aprovadas (ou ao cabeçalho de ocorrências).
@@ -368,7 +368,7 @@ export function parsePaginaBOA(items, faixas) {
           grau,
           crR,
           ch: decLinha(chAprYs),
-          pontos: grau != null ? grau * crR : null,
+          pontos: grau !== null && grau !== undefined ? grau * crR : null,
         });
       }
 
@@ -444,7 +444,7 @@ export function parsePaginaBOA(items, faixas) {
       vistos.add(codigo);
 
       const disciplina = { codigo, nome, crR, periodoRecomendado, status };
-      if (periodoRecomendado != null) {
+      if (periodoRecomendado !== null && periodoRecomendado !== undefined) {
         obrigatorias.push(disciplina);
       } else {
         optativas.push(disciplina);

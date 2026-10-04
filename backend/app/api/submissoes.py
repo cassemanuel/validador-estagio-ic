@@ -144,6 +144,10 @@ def criar_submissao(
     if ativa:
         raise HTTPException(409, "Já existe uma submissão em andamento.")
 
+    MAX_PAYLOAD_CHARS = 250_000
+    if len(payload) > MAX_PAYLOAD_CHARS:
+        raise HTTPException(413, "Payload muito grande.")
+
     try:
         body = SubmissaoPayload.model_validate_json(payload)
     except ValueError:
@@ -154,12 +158,19 @@ def criar_submissao(
 
     dados = body.model_dump(exclude={"excecoes"})
     regras = get_regras()
-    resultado = saneamento.analisar(dados, regras, user.username)
-
-    diagnostico = body.diagnostico or resultado["diagnostico_recalculado"]
-    status = triagem.rotear(
-        diagnostico, body.excecoes, resultado["alertas"]
-    )
+    try:
+        resultado = saneamento.analisar(dados, regras, user.username)
+        diagnostico = body.diagnostico or resultado["diagnostico_recalculado"]
+        status = triagem.rotear(
+            diagnostico, body.excecoes, resultado["alertas"]
+        )
+    except Exception as exc:
+        # Fallback seguro: evita 500 e garante que a submissão vá para revisão
+        # humana caso o processamento das regras falhe inesperadamente.
+        print(f"[submissoes] erro no saneamento/triagem: {exc}")
+        resultado = {"alertas": []}
+        diagnostico = body.diagnostico or {}
+        status = "mesa_revisao"
 
     sub = Submissao(
         discente_id=user.id,

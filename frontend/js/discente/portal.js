@@ -893,7 +893,7 @@ function renderDisciplinas(periodos) {
           el('td', {}, d.codigo),
           el('td', {}, d.nome),
           el('td', {}, formatNumberBR(d.crR, 1)),
-          el('td', {}, d.grau != null ? formatNumberBR(d.grau, 1) : '—'),
+          el('td', {}, d.grau !== null && d.grau !== undefined ? formatNumberBR(d.grau, 1) : '—'),
           el('td', {}, [
             el('span', { className: `badge ${badgeClassForSituacao(d.situacao)}` }, d.situacao),
           ]),
@@ -981,13 +981,13 @@ function getOptativasCursadas(pendencias) {
     if (!c || vistos.has(c) || obrigatorias.has(c)) return;
     // Aceita se está no catálogo de optativas do BOA OU já tem nota/conceito (aprovada).
     const noCatalogo = catalogo.has(c);
-    const temNota = detalhes.grau != null || detalhes.situacao;
+    const temNota = (detalhes.grau !== null && detalhes.grau !== undefined) || detalhes.situacao;
     if (!noCatalogo && !temNota) return;
     vistos.add(c);
     resultado.push({
       codigo: c,
       nome: nome || c,
-      grau: detalhes.grau != null ? formatNumberBR(detalhes.grau, 1) : null,
+      grau: detalhes.grau !== null && detalhes.grau !== undefined ? formatNumberBR(detalhes.grau, 1) : null,
       situacao: detalhes.situacao || 'AP',
     });
   };

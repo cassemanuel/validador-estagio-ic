@@ -335,7 +335,7 @@ function renderTabelaDisciplinas(sub) {
           el('td', {}, d.codigo),
           el('td', {}, d.nome),
           el('td', {}, formatNumberBR(d.crR, 1)),
-          el('td', {}, d.grau != null ? formatNumberBR(d.grau, 1) : '—'),
+          el('td', {}, d.grau !== null && d.grau !== undefined ? formatNumberBR(d.grau, 1) : '—'),
           el('td', {}, [
             el('span', { className: `badge ${badgeClassForSituacao(d.situacao)}` }, d.situacao),
           ]),
