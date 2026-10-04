@@ -1035,13 +1035,6 @@ function renderPendencias(pendencias) {
     Math.max(0, totalCredExigidos - creditosEletivasBoletim);
 
   const creditosRestantes = calcularCreditosRestantes(resumo);
-  const badge30h = () => {
-    if (creditosRestantes == null) return null;
-    if (creditosRestantes <= 10) {
-      return el('span', { className: 'badge badge-ap' }, 'Elegível para estágio de 30h');
-    }
-    return el('span', { className: 'badge badge-cursando' }, 'Limitado a 20h semanais');
-  };
 
   const renderOptativas = () => {
     if (eletivasConcluidas) {
@@ -1058,13 +1051,22 @@ function renderPendencias(pendencias) {
   };
 
   const ordemEletivas = ['escolha condicionada', 'escolha restrita', 'livre escolha'];
-  const gruposEletivos = (resumo?.grupos || [])
-    .filter((g) => ordemEletivas.includes(g.nome))
-    .sort(
-      (a, b) => ordemEletivas.indexOf(a.nome) - ordemEletivas.indexOf(b.nome)
-    );
+  const labelEletiva = {
+    'escolha condicionada': 'Escolha condicionada',
+    'escolha restrita': 'Escolha restrita (Humanidades)',
+    'livre escolha': 'Livre escolha',
+  };
+  const totalEletivas = {
+    'escolha condicionada': 32,
+    'escolha restrita': 4,
+    'livre escolha': 8,
+  };
+  const gruposEletivos = ordemEletivas.map((nome) => {
+    const g = (resumo?.grupos || []).find((x) => x.nome === nome);
+    return g || { nome, exigido: totalEletivas[nome], cumprido: 0, faltante: totalEletivas[nome] };
+  });
 
-  return el('div', { className: 'card' }, [
+  const cardPendencias = el('div', { className: 'card' }, [
     el('h3', {}, 'Pendências detectadas (BOA)'),
     el('div', { className: 'cards-grid' }, [
       el('div', {}, [
@@ -1077,22 +1079,38 @@ function renderPendencias(pendencias) {
       el('div', {}, [
         el('h4', {}, 'Optativas/Eletivas'),
         renderOptativas(),
-        creditosRestantes != null
-          ? el('div', { className: 'mt-1' }, [
-              el('span', {}, `Créditos restantes para formatura: ${creditosRestantes} `),
-              badge30h(),
-            ])
-          : null,
-        gruposEletivos.length
-          ? el('ul', { className: 'slots-eletivas' },
-              gruposEletivos.map((g) =>
-                el('li', { className: g.faltante <= 0 ? 'slot-preenchido' : 'slot-vago' },
-                  `${g.nome}: ${g.cumprido}/${g.exigido} créditos`)
-              ))
-          : null,
+        el('ul', { className: 'slots-eletivas' },
+          gruposEletivos.map((g) =>
+            el('li', { className: g.faltante <= 0 ? 'slot-preenchido' : 'slot-vago' },
+              `${labelEletiva[g.nome]}: ${g.cumprido}/${g.exigido} créditos`)
+          )),
       ]),
     ]),
   ]);
+
+  const cardJornada = creditosRestantes != null
+    ? el('div', { className: 'card card-jornada-info' }, [
+        el('strong', {}, 'Jornada de Estágio Permitida (Normas 2025 - Art. 2º):'),
+        el('div', {}, [
+          el('span', {}, 'Créditos restantes para conclusão do curso: '),
+          el('strong', {}, String(creditosRestantes)),
+          ' ',
+          el('span', {
+            className: `badge ${creditosRestantes <= 10 ? 'badge-ap' : 'badge-cursando'}`,
+          }, creditosRestantes <= 10
+            ? 'Elegível para até 30h semanais'
+            : 'Carga horária máxima: 20h semanais'),
+        ]),
+        el('p', { className: 'text-muted jornada-ajuda' },
+          creditosRestantes <= 10
+            ? 'Autorização de 30h permitida por até 6 meses (Art. 2º, §1º).'
+            : 'Estágios de 30h só são permitidos quando faltarem no máximo 10 créditos para conclusão.'),
+      ])
+    : null;
+
+  return cardJornada
+    ? el('div', {}, [cardPendencias, cardJornada])
+    : cardPendencias;
 }
 
 function renderDiagnostico({ apto, criterios }) {

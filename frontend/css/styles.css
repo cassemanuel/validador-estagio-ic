@@ -2406,6 +2406,23 @@ th {
   background-color: var(--bg-hover);
 }
 
+/* Banner informativo de jornada de estágio (Normas 2025, Art. 2º) */
+.card-jornada-info {
+  border-left: 4px solid var(--status-cursando);
+  background-color: var(--status-cursando-bg);
+}
+
+.card-jornada-info.elegivel-30h,
+.card-jornada-info .badge-ap {
+  border-left-color: var(--status-ap);
+  background-color: var(--status-ap-bg);
+}
+
+.jornada-ajuda {
+  font-size: 0.8rem;
+  margin: 4px 0 0;
+}
+
 /* Botão de texto no rodapé */
 .btn-text {
   background: none;
