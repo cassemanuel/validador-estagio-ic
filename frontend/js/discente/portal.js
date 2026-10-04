@@ -1087,6 +1087,36 @@ function renderPendencias(pendencias) {
     STATUS_PENDENCIA[status] || (status ? String(status).replace(/_/g, ' ') : 'Pendente');
   const itemObr = (d) =>
     el('li', {}, `${d.codigo || d.nome} — ${formatarStatus(d.status)}`);
+  const itemOpt = (d) =>
+    el('li', {}, `${d.codigo} — ${d.nome}${d.grau ? ` (${d.grau})` : ''}`);
+
+  // Agrupa obrigatórias pendentes pelo período recomendado do BOA.
+  const renderObrigatoriasPorPeriodo = () => {
+    const grupos = new Map();
+    const semPeriodo = [];
+    for (const d of pendencias.obrigatorias || []) {
+      const p = d.periodoRecomendado;
+      if (p === null || p === undefined) {
+        semPeriodo.push(d);
+      } else {
+        if (!grupos.has(p)) grupos.set(p, []);
+        grupos.get(p).push(d);
+      }
+    }
+    const ordenado = [...grupos.entries()]
+      .sort((a, b) => Number(a[0]) - Number(b[0]));
+    if (semPeriodo.length) ordenado.push(['não identificado', semPeriodo]);
+
+    return ordenado.map(([periodo, lista]) =>
+      el('div', {}, [
+        el('h5', { className: 'mt-2 mb-1 text-muted' },
+          typeof periodo === 'number'
+            ? `${periodo}º Período`
+            : 'Período não identificado'),
+        el('ul', { className: 'pendencias-obr' }, lista.map(itemObr)),
+      ])
+    );
+  };
 
   // Fonte única da verdade: Boletim (disciplinas aprovadas).
   const progresso = calcularProgressoIntegralizacao(
@@ -1097,7 +1127,7 @@ function renderPendencias(pendencias) {
   const faltantesEletivas = progresso.faltantesEletivas;
   const creditosRestantes = progresso.creditosRestantes;
 
-  const renderOptativas = () => {
+  const renderOptativasBadge = () => {
     if (faltantesEletivas <= 0) {
       return el('div', { className: 'slot-preenchido' },
         `Eletivas e Optativas Concluídas (${creditosEletivasCumpridos}/44 créditos)`);
@@ -1106,29 +1136,62 @@ function renderPendencias(pendencias) {
       `Faltam ${faltantesEletivas} créditos (Cumpridos: ${creditosEletivasCumpridos}/44)`);
   };
 
-  const optativasCursadas = getOptativasCursadas(pendencias);
-  const listaOptativas = optativasCursadas.length
-    ? el('ul', { className: 'optativas-lista' },
-        optativasCursadas.map((d) =>
-          el('li', {},
-            `${d.codigo} — ${d.nome}${d.grau ? ` (${d.grau})` : ''}`)
-        ))
-    : el('p', { className: 'text-muted' }, 'Nenhuma optativa/eletiva detectada.');
+  // Heurística visual de categorização de eletivas/optativas já cursadas.
+  const optativasCursadas = getOptativasCursadas(pendencias)
+    .slice()
+    .sort((a, b) => String(a.codigo || '').localeCompare(String(b.codigo || '')));
+  const categorias = { condicionadas: [], restrita: [], livres: [] };
+  for (const d of optativasCursadas) {
+    const c = String(d.codigo || '').toUpperCase();
+    if (c.startsWith('ICP') || c === 'LEB599') {
+      categorias.condicionadas.push(d);
+    } else if (c.startsWith('NEP')) {
+      categorias.restrita.push(d);
+    } else {
+      categorias.livres.push(d);
+    }
+  }
+  const renderCategoria = (titulo, lista) =>
+    lista.length
+      ? el('div', {}, [
+          el('h5', { className: 'mt-2 mb-1 text-muted' }, titulo),
+          el('ul', { className: 'optativas-lista' }, lista.map(itemOpt)),
+        ])
+      : null;
+
+  const avisoCategorizacao = el('div', {
+    className: 'card-aviso',
+    style: { padding: '10px', borderRadius: '6px', marginTop: '15px' },
+  }, [
+    el('i', {
+      className: 'bi bi-exclamation-triangle',
+      style: { color: '#d97706', marginRight: '5px' },
+    }),
+    el('span', { style: { fontSize: '0.85rem', color: '#92400e' } }, [
+      el('strong', {}, 'Aviso:'),
+      ' A categorização acima é uma sugestão visual. Confirme se as matérias são realmente eletivas consultando a grade oficial do SIGA ou o seu BOA.',
+    ]),
+  ]);
 
   const cardPendencias = el('div', { className: 'card' }, [
-    el('h3', {}, 'Pendências detectadas (BOA)'),
+    el('h3', {}, 'Obrigatórias pendentes e outras matérias cursadas'),
     el('div', { className: 'cards-grid' }, [
       el('div', {}, [
         el('h4', {}, 'Obrigatórias'),
-        el('ul', { className: 'pendencias-obr' },
-          (pendencias.obrigatorias || []).length
-            ? (pendencias.obrigatorias || []).map(itemObr)
-            : [el('li', { className: 'text-muted' }, 'Nenhuma obrigatória pendente.')]),
+        (pendencias.obrigatorias || []).length
+          ? renderObrigatoriasPorPeriodo()
+          : el('p', { className: 'text-muted' }, 'Nenhuma obrigatória pendente.'),
       ]),
       el('div', {}, [
-        el('h4', {}, 'Optativas/Eletivas'),
-        renderOptativas(),
-        listaOptativas,
+        el('h4', {}, 'Eletivas/Optativas Cursadas'),
+        renderOptativasBadge(),
+        renderCategoria('Prováveis Escolhas Condicionadas', categorias.condicionadas),
+        renderCategoria('Provável Escolha Restrita (Humanidades)', categorias.restrita),
+        renderCategoria('Prováveis Livres Escolhas', categorias.livres),
+        !optativasCursadas.length
+          ? el('p', { className: 'text-muted' }, 'Nenhuma optativa/eletiva detectada.')
+          : null,
+        avisoCategorizacao,
       ]),
     ]),
   ]);
