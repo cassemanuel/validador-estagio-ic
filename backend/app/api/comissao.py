@@ -23,7 +23,7 @@ from ..schemas import DecisaoIn, RevogarIn
 from ..services import crypto
 from ..services.auditoria import registrar
 from ..services.autorizacao import dados_autorizacao
-from ..services.metricas import calcular_metricas
+from ..services.metricas import calcular_metricas, calcular_metricas_autorizacoes
 
 router = APIRouter(prefix="/api/comissao", tags=["comissao"])
 
@@ -188,10 +188,14 @@ def auditoria(
 @router.get("/autorizacoes")
 def autorizacoes(
     ano: int | None = Query(None, ge=2000, le=2100),
+    status: str | None = Query(None, pattern="^(vigente|expirada)$"),
+    offset: int = Query(0, ge=0),
+    limite: int = Query(10, ge=1, le=200),
+    q: str | None = Query(None, max_length=100),
     db: Session = Depends(get_db),
     _=Depends(require_comissao),
 ):
-    """Liberações deferidas com validade (liberação + N dias)."""
+    """Liberações deferidas com validade, paginação e busca por DRE/nome."""
     subs = (
         db.query(Submissao)
         .filter(Submissao.status == "aprovada")
@@ -201,17 +205,25 @@ def autorizacoes(
     anos = sorted(
         {s.concluido_em.year for s in subs if s.concluido_em}, reverse=True
     )
-    if ano is not None:
-        subs = [
-            s for s in subs
-            if s.concluido_em and s.concluido_em.year == ano
-        ]
+
     linhas = []
     for s in subs:
         aut = dados_autorizacao(s, settings.autorizacao_validade_dias)
         if not aut:
             continue
         metadata = json.loads(s.metadata_json)
+        if ano is not None and s.concluido_em and s.concluido_em.year != ano:
+            continue
+        if status:
+            status_linha = "expirada" if aut["expirada"] else "vigente"
+            if status_linha != status:
+                continue
+        if q:
+            termo = q.lower()
+            dre = str(metadata.get("dre") or "").lower()
+            nome = str(metadata.get("nome") or "").lower()
+            if termo not in dre and termo not in nome:
+                continue
         linhas.append(
             {
                 "id": s.id,
@@ -223,7 +235,22 @@ def autorizacoes(
                 "status": "expirada" if aut["expirada"] else "vigente",
             }
         )
-    return {"autorizacoes": linhas, "anos": anos}
+
+    return {
+        "autorizacoes": linhas[offset : offset + limite],
+        "anos": anos,
+        "total": len(linhas),
+        "offset": offset,
+        "limite": limite,
+    }
+
+
+@router.get("/autorizacoes/metricas")
+def autorizacoes_metricas(
+    db: Session = Depends(get_db), _=Depends(require_comissao)
+):
+    """Métricas analíticas para a tela de Autorizações."""
+    return calcular_metricas_autorizacoes(db, settings)
 
 
 @router.get("/submissoes/{sub_id}")

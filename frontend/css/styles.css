@@ -1809,12 +1809,14 @@ table .btn {
 /* Barra segmentada � pills com contraste em ambos os temas */
 .app-nav.segmented {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--border-color);
   border-radius: 999px;
   background-color: var(--bg-secondary);
   width: fit-content;
+  overflow-x: visible;
   margin-bottom: var(--spacing-md);
 }
 

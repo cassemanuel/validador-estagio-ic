@@ -248,13 +248,7 @@ def minha_submissao(
     )
     if not sub:
         return {"submissao": None}
-    decisao = (
-        db.query(Decisao)
-        .filter(Decisao.submissao_id == sub.id)
-        .order_by(Decisao.id.desc())
-        .first()
-    )
-    return {"submissao": _serializar(sub, decisao)}
+    return {"submissao": _serializar_completo(sub)}
 
 
 @router.get("/minhas")
@@ -315,14 +309,17 @@ def _serializar_completo(sub: Submissao) -> dict:
     from ..models import Decisao  # import local para evitar ciclos
 
     metadata = json.loads(sub.metadata_json)
-    decisao = (
-        sub.decisoes[-1] if sub.decisoes else None
-    )
+    extraidos = json.loads(sub.dados_extraidos_json) if sub.dados_extraidos_json else {}
+    decisao = sub.decisoes[-1] if sub.decisoes else None
     return {
         "id": sub.id,
         "status": sub.status,
         "tipoDocumento": sub.tipo_documento,
         "metadata": metadata,
+        "autorizacao": dados_autorizacao(sub, settings.autorizacao_validade_dias),
+        "periodos": extraidos.get("periodos") or [],
+        "pendencias": extraidos.get("pendencias") or {},
+        "resumoBoa": extraidos.get("resumo_boa") or {},
         "documentos": {
             "boletim": {
                 "nome": metadata.get("nomeArquivoBoletim") or "boletim.pdf",

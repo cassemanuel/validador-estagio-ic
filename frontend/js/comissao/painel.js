@@ -15,7 +15,11 @@ import { abrirMesa } from './mesa.js';
 let filaParams = { tipo: 'todos', status: 'todos', q: '', offset: 0, limite: 25 };
 let filaCarregando = false;
 let dashboardAno = '';
-let autorizacoesAno = '';
+
+const autorizacoesParams = {
+  vigentes: { q: '', offset: 0, limite: 10 },
+  expiradas: { q: '', offset: 0, limite: 10 },
+};
 
 const ACAO_LABEL = {
   login: 'Login',
@@ -97,6 +101,7 @@ export function initPainel(viewAtual = 'view-admin-dashboard') {
   initFilaTabs();
   initBuscaFila();
   initFiltrosAno();
+  initAutorizacoes();
   carregarPainel(viewAtual);
 }
 
@@ -109,14 +114,33 @@ function initFiltrosAno() {
       carregarMetricas();
     });
   }
-  const aut = document.getElementById('autorizacoes-ano');
-  if (aut && !aut.dataset.bound) {
-    aut.dataset.bound = '1';
-    aut.addEventListener('change', () => {
-      autorizacoesAno = aut.value;
-      carregarAutorizacoes();
-    });
-  }
+}
+
+function initAutorizacoes() {
+  const vincularBusca = (id, status) => {
+    const input = document.getElementById(id);
+    if (input && !input.dataset.bound) {
+      input.dataset.bound = '1';
+      input.addEventListener('input', () => {
+        autorizacoesParams[status].q = input.value.trim();
+        autorizacoesParams[status].offset = 0;
+        carregarAutorizacoesLista(status, false);
+      });
+    }
+  };
+  const vincularMais = (id, status) => {
+    const btn = document.getElementById(id);
+    if (btn && !btn.dataset.bound) {
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', () => {
+        carregarAutorizacoesLista(status, true);
+      });
+    }
+  };
+  vincularBusca('autorizacoes-q-vigentes', 'vigentes');
+  vincularBusca('autorizacoes-q-expiradas', 'expiradas');
+  vincularMais('autorizacoes-mais-vigentes', 'vigentes');
+  vincularMais('autorizacoes-mais-expiradas', 'expiradas');
 }
 
 function preencherAnos(selectEl, anos, selecionado) {
@@ -539,74 +563,150 @@ function renderPaginacao(total, container) {
    ============================================================ */
 
 async function carregarAutorizacoes() {
-  const container = document.getElementById('admin-autorizacoes');
+  await Promise.all([
+    carregarMetricasAutorizacoes(),
+    carregarAutorizacoesLista('vigentes', false),
+    carregarAutorizacoesLista('expiradas', false),
+  ]);
+}
+
+async function carregarMetricasAutorizacoes() {
+  const container = document.getElementById('autorizacoes-metricas');
+  if (!container) return;
   clearElement(container);
 
-  let resp;
+  let m;
   try {
-    resp = await api(`/api/comissao/autorizacoes${autorizacoesAno ? `?ano=${autorizacoesAno}` : ''}`);
+    m = await api('/api/comissao/autorizacoes/metricas');
   } catch {
     return;
   }
-  const { autorizacoes } = resp;
-  preencherAnos(
-    document.getElementById('autorizacoes-ano'), resp.anos, autorizacoesAno
-  );
 
-  const corpo = autorizacoes.length
-    ? autorizacoes.map((a) => {
-        const btnRevogar = a.status === 'vigente'
-          ? el('button', { className: 'btn btn-danger btn-sm', type: 'button' }, 'Revogar')
-          : null;
-        if (btnRevogar) {
-          btnRevogar.addEventListener('click', async () => {
-            const motivo = await dialogConfirmar({
-              titulo: 'Revogar Autorização',
-              mensagem: `Informe o motivo da revogação da autorização de ${a.nome || '—'}.`,
-            });
-            if (!motivo) return;
-            try {
-              await api(`/api/comissao/submissoes/${a.id}/revogar`, {
-                method: 'POST',
-                body: { motivo },
-              });
-              await carregarAutorizacoes();
-            } catch (err) {
-              await dialogAviso('Falha na revogação', err.message);
-            }
-          });
-        }
-        return el('tr', { className: a.status === 'expirada' ? 'row-expirada' : '' }, [
-          el('td', {}, fmtData(a.liberadaEm)),
-          el('td', {}, a.nome || '—'),
-          el('td', {}, a.dre || '—'),
-          el('td', {}, [
-            el('span', {
-              className: `badge ${a.status === 'vigente' ? 'badge-ap' : 'badge-reprovado'}`,
-            }, a.status === 'vigente' ? 'Vigente' : 'Expirada'),
-          ]),
-          el('td', {},
-            `${fmtData(a.validaAte)}` + (a.status === 'vigente' ? ` (${a.diasParaVencer}d)` : '')),
-          el('td', {}, btnRevogar || '—'),
-        ]);
-      })
-    : [el('tr', {}, [el('td', { colspan: '6', className: 'text-muted' }, 'Nenhuma autorização emitida.')])];
+  const primeiro = m.moda_periodo?.primeiro;
+  const segundo = m.moda_periodo?.segundo;
+  const cards = [
+    {
+      label: 'Tempo médio de resposta',
+      valor: `${m.tempo_medio_resposta_dias || 0}d`,
+      detalhe: 'últimos 3 meses',
+    },
+    {
+      label: 'Total de Autorizados',
+      valor: `${m.total_autorizados || 0}`,
+      detalhe: 'histórico',
+    },
+    {
+      label: 'Total Expirados',
+      valor: `${m.total_expirados || 0}`,
+      detalhe: 'histórico',
+    },
+    {
+      label: 'Período Mais Comum',
+      valor: primeiro ? `${primeiro.periodo}º período` : '—',
+      detalhe: segundo ? `2º mais comum: ${segundo.periodo}º período` : '',
+      valorCls: 'metric-value-destaque',
+    },
+  ];
 
   container.appendChild(
-    el('div', { className: 'card table-container' }, [
-      el('table', { className: 'triage-table' }, [
-        el('thead', {}, [
-          el('tr', {}, [
-            el('th', { scope: 'col' }, 'Data da Liberação'),
-            el('th', { scope: 'col' }, 'Nome do Aluno'),
-            el('th', { scope: 'col' }, 'DRE'),
-            el('th', { scope: 'col' }, 'Status'),
-            el('th', { scope: 'col' }, 'Validade'),
-            el('th', { scope: 'col' }, 'Ação'),
-          ]),
-        ]),
-        el('tbody', {}, corpo),
-      ]),
-    ])
+    el('div', { className: 'cards-grid metricas-grid' },
+      cards.map((c) =>
+        el('div', { className: 'card metric-card' }, [
+          el('span', { className: 'cr-detail-label' }, c.label),
+          el('p', { className: `metric-value ${c.valorCls || ''}` }, c.valor),
+          c.detalhe ? el('p', { className: 'text-muted metric-det' }, c.detalhe) : null,
+        ])))
   );
+}
+
+function renderCabecalhoAutorizacoes() {
+  return el('thead', {}, [
+    el('tr', {}, [
+      el('th', { scope: 'col' }, 'Data da Liberação'),
+      el('th', { scope: 'col' }, 'Nome do Aluno'),
+      el('th', { scope: 'col' }, 'DRE'),
+      el('th', { scope: 'col' }, 'Validade'),
+      el('th', { scope: 'col' }, 'Ação'),
+    ]),
+  ]);
+}
+
+function renderLinhaAutorizacao(a, podeRevogar) {
+  const btnRevogar = podeRevogar
+    ? el('button', { className: 'btn btn-danger btn-sm', type: 'button' }, 'Revogar')
+    : null;
+  if (btnRevogar) {
+    btnRevogar.addEventListener('click', async () => {
+      const motivo = await dialogConfirmar({
+        titulo: 'Revogar Autorização',
+        mensagem: `Informe o motivo da revogação da autorização de ${a.nome || '—'}.`,
+      });
+      if (!motivo) return;
+      try {
+        await api(`/api/comissao/submissoes/${a.id}/revogar`, {
+          method: 'POST',
+          body: { motivo },
+        });
+        await carregarAutorizacoes();
+      } catch (err) {
+        await dialogAviso('Falha na revogação', err.message);
+      }
+    });
+  }
+  return el('tr', { className: a.status === 'expirada' ? 'row-expirada' : '' }, [
+    el('td', {}, fmtData(a.liberadaEm)),
+    el('td', {}, a.nome || '—'),
+    el('td', {}, a.dre || '—'),
+    el('td', {}, `${fmtData(a.validaAte)}${a.status === 'vigente' ? ` (${a.diasParaVencer}d)` : ''}`),
+    el('td', {}, btnRevogar || '—'),
+  ]);
+}
+
+async function carregarAutorizacoesLista(status, append = false) {
+  const apiStatus = status === 'vigentes' ? 'vigente' : 'expirada';
+  const params = autorizacoesParams[status];
+  const container = document.getElementById(`autorizacoes-lista-${status}`);
+  const btnMais = document.getElementById(`autorizacoes-mais-${status}`);
+  if (!container) return;
+
+  if (!append) {
+    clearElement(container);
+    params.offset = 0;
+  }
+
+  const url = `/api/comissao/autorizacoes?status=${apiStatus}&offset=${params.offset}&limite=${params.limite}${params.q ? `&q=${encodeURIComponent(params.q)}` : ''}`;
+
+  try {
+    const resp = await api(url);
+    const lista = resp.autorizacoes || [];
+    let tbody = container.querySelector('tbody');
+
+    if (!tbody) {
+      const table = el('table', { className: 'triage-table' }, [
+        renderCabecalhoAutorizacoes(),
+        el('tbody', {}),
+      ]);
+      container.appendChild(el('div', { className: 'card table-container' }, [table]));
+      tbody = table.querySelector('tbody');
+    }
+
+    if (!lista.length && !append) {
+      tbody.appendChild(
+        el('tr', {}, [
+          el('td', { colspan: '5', className: 'text-muted' }, 'Nenhuma autorização encontrada.'),
+        ])
+      );
+    } else {
+      lista.forEach((a) =>
+        tbody.appendChild(renderLinhaAutorizacao(a, status === 'vigentes'))
+      );
+    }
+
+    params.offset += lista.length;
+    if (btnMais) {
+      btnMais.hidden = resp.total <= params.offset || lista.length === 0;
+    }
+  } catch {
+    // silencia: a view permanece no estado anterior
+  }
 }

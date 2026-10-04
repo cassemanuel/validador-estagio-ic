@@ -270,3 +270,72 @@ def test_autorizacoes_validade_90_dias(client):
     minha = client.get("/api/submissoes/minha").json()["submissao"]
     assert minha["autorizacao"]["validaAte"] == a["validaAte"]
     assert not minha["autorizacao"]["expirada"]
+
+
+def test_autorizacoes_metricas(client):
+    """O endpoint /autorizacoes/metricas retorna indicadores analíticos."""
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+
+    login(client, "comissao1", "comissao123")
+    client.post(
+        f"/api/comissao/submissoes/{sub['id']}/decisao",
+        json={"decisao": "aprovada"},
+    )
+
+    resp = client.get("/api/comissao/autorizacoes/metricas")
+    assert resp.status_code == 200
+    m = resp.json()
+    assert m["total_autorizados"] == 1
+    assert m["total_expirados"] == 0
+    assert "tempo_medio_resposta_dias" in m
+    assert m["tempo_medio_resposta_dias"] >= 0
+    assert "moda_periodo" in m
+    # O ingresso do fixture é 2023/1; em 2025 o período estimado é >= 1.
+    assert m["moda_periodo"]["primeiro"]["periodo"] >= 1
+
+
+def test_autorizacoes_paginacao_e_busca(client):
+    """A listagem de autorizações aceita paginação, status e busca por DRE/nome."""
+    login(client, "aluno1", "aluno123")
+    sub1 = submeter(client).json()
+
+    login(client, "aluno2", "aluno123")
+    p2 = payload_apto()
+    p2["metadata"]["nome"] = "Segundo Aluno"
+    p2["metadata"]["dre"] = "aluno2"
+    sub2 = submeter(client, payload=p2).json()
+
+    login(client, "comissao1", "comissao123")
+    client.post(
+        f"/api/comissao/submissoes/{sub1['id']}/decisao",
+        json={"decisao": "aprovada"},
+    )
+    client.post(
+        f"/api/comissao/submissoes/{sub2['id']}/decisao",
+        json={"decisao": "aprovada"},
+    )
+
+    resp = client.get("/api/comissao/autorizacoes?limite=1")
+    assert resp.status_code == 200
+    dados = resp.json()
+    assert len(dados["autorizacoes"]) == 1
+    assert dados["total"] == 2
+    assert dados["limite"] == 1
+
+    offset = client.get("/api/comissao/autorizacoes?limite=1&offset=1").json()
+    assert len(offset["autorizacoes"]) == 1
+    assert offset["autorizacoes"][0]["id"] != dados["autorizacoes"][0]["id"]
+
+    vigentes = client.get("/api/comissao/autorizacoes?status=vigente").json()
+    assert len(vigentes["autorizacoes"]) == 2
+
+    expiradas = client.get("/api/comissao/autorizacoes?status=expirada").json()
+    assert expiradas["autorizacoes"] == []
+
+    busca = client.get("/api/comissao/autorizacoes?q=aluno1").json()
+    assert len(busca["autorizacoes"]) == 1
+    assert busca["autorizacoes"][0]["dre"] == "aluno1"
+
+    vazia = client.get("/api/comissao/autorizacoes?q=naoexiste").json()
+    assert vazia["autorizacoes"] == []

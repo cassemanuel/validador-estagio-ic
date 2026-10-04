@@ -282,16 +282,35 @@
     <!-- ===== Admin: Autorizações ===== -->
     <section id="view-admin-autorizacoes" class="tab-panel" hidden>
       <div class="admin-header">
-        <h2>Autorizações e Deferimentos</h2>
-        <p class="text-muted">Liberações deferidas e validade de 90 dias.</p>
+        <h2>Autorizados</h2>
+        <p class="text-muted">Autorizações deferidas, vigência e histórico.</p>
       </div>
-      <div class="fila-toolbar">
-        <label class="fila-status-label" for="autorizacoes-ano">Ano:</label>
-        <select id="autorizacoes-ano" class="input-busca input-ano">
-          <option value="" selected>Todos os anos</option>
-        </select>
+
+      <div id="autorizacoes-metricas" class="metricas-grid"></div>
+
+      <div class="autorizacoes-secao">
+        <h3>Autorizações Válidas</h3>
+        <input
+          id="autorizacoes-q-vigentes"
+          class="input-busca"
+          type="search"
+          placeholder="Buscar por DRE ou nome"
+        />
+        <div id="autorizacoes-lista-vigentes"></div>
+        <button id="autorizacoes-mais-vigentes" class="btn btn-secondary btn-sm" type="button">Carregar Mais</button>
       </div>
-      <div id="admin-autorizacoes"></div>
+
+      <div class="autorizacoes-secao">
+        <h3>Autorizações Expiradas</h3>
+        <input
+          id="autorizacoes-q-expiradas"
+          class="input-busca"
+          type="search"
+          placeholder="Buscar por DRE ou nome"
+        />
+        <div id="autorizacoes-lista-expiradas"></div>
+        <button id="autorizacoes-mais-expiradas" class="btn btn-secondary btn-sm" type="button">Carregar Mais</button>
+      </div>
     </section>
 
     <!-- ===== Admin: Relatórios de Estágio ===== -->

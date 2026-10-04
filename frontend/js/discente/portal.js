@@ -36,6 +36,7 @@ const state = {
   diagnostico: null,
   excecoes: [],
   alertasCruzamento: [],
+  submissaoBloqueada: false,
 };
 
 const STATUS_LABEL = {
@@ -118,8 +119,73 @@ export async function initPortal() {
 
   const ativo = STATUS_ATIVOS.includes(submissao.status);
   const autorizacaoBloqueante = isAutorizacaoBloqueante(submissao.autorizacao);
-  fluxoEl.hidden = ativo || autorizacaoBloqueante;
+  state.submissaoBloqueada = ativo || autorizacaoBloqueante;
+
+  // Sempre exibe o fluxo como simulador; o envio é controlado separadamente.
+  fluxoEl.hidden = false;
   renderStatus(statusEl, submissao);
+
+  // Pré-renderiza a análise com os dados da submissão existente, liberando
+  // a aba "Análise de Desempenho" mesmo sem novo upload.
+  if (carregarSubmissaoExistente(submissao)) {
+    const revisao = document.getElementById('discente-revisao');
+    const analise = document.getElementById('discente-analise');
+    if (revisao && analise) {
+      renderRevisao(revisao);
+      renderAnalise(analise);
+      habilitarAnalise(true);
+    }
+  }
+
+  aplicarBloqueioDeEnvio();
+}
+
+function carregarSubmissaoExistente(sub) {
+  if (!sub?.periodos?.length) return false;
+
+  state.boletim = {
+    file: null,
+    historico: {
+      metadata: {
+        ...(sub.metadata || {}),
+        tipoDocumento: sub.tipoDocumento || sub.metadata?.tipoDocumento || 'boletim',
+      },
+      periodos: sub.periodos,
+    },
+  };
+  state.boa = {
+    file: null,
+    dados: {
+      metadata: sub.metadata || {},
+      resumo: sub.resumoBoa || {},
+      obrigatorias: sub.pendencias?.obrigatorias || [],
+      optativas: sub.pendencias?.optativas || [],
+    },
+  };
+  state.diagnostico = sub.diagnostico || null;
+  mergeAndDiagnose();
+  return true;
+}
+
+function aplicarBloqueioDeEnvio() {
+  const fluxo = document.getElementById('discente-fluxo');
+  const submitCard = document.querySelector('#discente-revisao .submit-card');
+  if (!fluxo) return;
+
+  let aviso = document.getElementById('simulador-aviso');
+  if (state.submissaoBloqueada) {
+    if (!aviso) {
+      aviso = el('div', { className: 'card card-aviso', id: 'simulador-aviso' }, [
+        el('i', { className: 'bi bi-info-circle' }),
+        el('span', {}, 'Você possui uma submissão em análise ou autorização vigente. O envio oficial está bloqueado, mas você pode anexar documentos atualizados abaixo apenas para visualizar sua Análise de Desempenho e simular sua grade.'),
+      ]);
+      fluxo.insertBefore(aviso, fluxo.firstChild);
+    }
+    if (submitCard) submitCard.style.display = 'none';
+  } else {
+    if (aviso) aviso.remove();
+    if (submitCard) submitCard.style.display = '';
+  }
 }
 
 function isAutorizacaoBloqueante(autorizacao) {
@@ -471,6 +537,8 @@ function renderRevisao(container) {
   btn.addEventListener('click', () => submitDocuments(btn, erro));
   updateConfirmButton();
   container.appendChild(el('div', { className: 'card submit-card' }, [btn, erro]));
+
+  aplicarBloqueioDeEnvio();
 }
 
 function updateConfirmButton() {
