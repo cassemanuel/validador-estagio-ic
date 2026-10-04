@@ -40,7 +40,9 @@
     { "codigo": "ICP370", "nome": "Inteligência Artificial", "periodo": 7, "crR": 4, "aceitos": ["ICP370"] },
     { "codigo": "ICP472", "nome": "Trabalho de Conclusão de Curso I", "periodo": 7, "crR": 4, "aceitos": ["ICP472"] },
     { "codigo": "ICP473", "nome": "Segurança da Informação", "periodo": 8, "crR": 4, "aceitos": ["ICP473"] },
-    { "codigo": "ICPK01", "nome": "Estágio Curricular Obrigatório", "periodo": 8, "crR": 4, "aceitos": ["ICPK01"] }
+    { "codigo": "ICPK01", "nome": "Estágio Curricular Obrigatório", "periodo": 8, "crR": 4, "aceitos": ["ICPK01"] },
+    { "codigo": "ICPX06", "nome": "Atividades Complementares Bcc", "periodo": 1, "crR": 2, "aceitos": ["ICPX06"] },
+    { "codigo": "ICPZ55", "nome": "Ativ Curricular Extensão - Bcc", "periodo": 1, "crR": 0, "aceitos": ["ICPZ55"] }
   ],
   "ciclo_basico": [
     { "codigo": "ICP131", "nome": "Programação de Computadores I", "periodo": 1, "aceitos": ["ICP131", "MAB120"], "aceitos_conjunto": [["MAB121", "CMT012"]] },
