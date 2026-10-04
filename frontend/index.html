@@ -145,64 +145,74 @@
       <div id="discente-historico" hidden></div>
       <div id="discente-status"></div>
 
-      <div id="discente-fluxo">
-        <div class="panel-header">
-          <div>
-            <h2>Submeter Documentos para Validação de Estágio</h2>
-            <p class="text-muted">
-              Ambos os documentos são obrigatórios: o <strong>Boletim Não Oficial</strong>
-              traz o histórico de notas e CR, e o <strong>BOA</strong> traz a grade
-              curricular e as pendências do PPC 2022.
-            </p>
-          </div>
-          <button type="button" id="btn-limpar-documentos" class="btn btn-secondary btn-sm">
-            <i class="bi bi-trash" aria-hidden="true"></i> Limpar Documentos
-          </button>
-        </div>
+      <div class="app-nav segmented" id="aluno-nav">
+        <button class="tab-btn active" data-aluno-tab="submissao">Submissão</button>
+        <button class="tab-btn" data-aluno-tab="analise" disabled data-tooltip="Ativa somente ao carregar o BOA e o Boletim">Análise de Desempenho</button>
+      </div>
 
-        <div class="upload-grid">
-          <div class="upload-card" id="upload-boletim-card">
-            <h3><i class="bi bi-file-earmark-text"></i> Boletim Não Oficial</h3>
-            <div class="dropzone" id="boletim-dropzone">
-              <input
-                type="file"
-                id="boletim-input"
-                accept=".pdf,application/pdf"
-                aria-label="Selecionar PDF do Boletim Não Oficial"
-              />
-              <label for="boletim-input" class="dropzone-label">
-                <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
-                <span>Clique ou arraste o PDF aqui</span>
-              </label>
-              <div class="dropzone-hint">Histórico de notas do SIGA/UFRJ</div>
+      <div id="aluno-tab-submissao">
+        <div id="discente-fluxo">
+          <div class="panel-header">
+            <div>
+              <h2>Submeter Documentos para Validação de Estágio</h2>
+              <p class="text-muted">
+                Ambos os documentos são obrigatórios: o <strong>Boletim Não Oficial</strong>
+                traz o histórico de notas e CR, e o <strong>BOA</strong> traz a grade
+                curricular e as pendências do PPC 2022.
+              </p>
             </div>
-            <div class="upload-badge hidden" id="boletim-badge"></div>
+            <button type="button" id="btn-limpar-documentos" class="btn btn-secondary btn-sm">
+              <i class="bi bi-trash" aria-hidden="true"></i> Limpar Documentos
+            </button>
           </div>
 
-          <div class="upload-card" id="upload-boa-card">
-            <h3><i class="bi bi-grid-3x3-gap"></i> BOA</h3>
-            <div class="dropzone" id="boa-dropzone">
-              <input
-                type="file"
-                id="boa-input"
-                accept=".pdf,application/pdf"
-                aria-label="Selecionar PDF do BOA"
-              />
-              <label for="boa-input" class="dropzone-label">
-                <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
-                <span>Clique ou arraste o PDF aqui</span>
-              </label>
-              <div class="dropzone-hint">Boletim de Orientação Acadêmica do SIGA</div>
+          <div class="upload-grid">
+            <div class="upload-card" id="upload-boletim-card">
+              <h3><i class="bi bi-file-earmark-text"></i> Boletim Não Oficial</h3>
+              <div class="dropzone" id="boletim-dropzone">
+                <input
+                  type="file"
+                  id="boletim-input"
+                  accept=".pdf,application/pdf"
+                  aria-label="Selecionar PDF do Boletim Não Oficial"
+                />
+                <label for="boletim-input" class="dropzone-label">
+                  <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+                  <span>Clique ou arraste o PDF aqui</span>
+                </label>
+                <div class="dropzone-hint">Histórico de notas do SIGA/UFRJ</div>
+              </div>
+              <div class="upload-badge hidden" id="boletim-badge"></div>
             </div>
-            <div class="upload-badge hidden" id="boa-badge"></div>
+
+            <div class="upload-card" id="upload-boa-card">
+              <h3><i class="bi bi-grid-3x3-gap"></i> BOA</h3>
+              <div class="dropzone" id="boa-dropzone">
+                <input
+                  type="file"
+                  id="boa-input"
+                  accept=".pdf,application/pdf"
+                  aria-label="Selecionar PDF do BOA"
+                />
+                <label for="boa-input" class="dropzone-label">
+                  <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+                  <span>Clique ou arraste o PDF aqui</span>
+                </label>
+                <div class="dropzone-hint">Boletim de Orientação Acadêmica do SIGA</div>
+              </div>
+              <div class="upload-badge hidden" id="boa-badge"></div>
+            </div>
           </div>
-        </div>
 
-        <div id="pdf-progress" class="progress hidden" aria-live="polite">
-          <div class="progress-bar" id="pdf-progress-bar"></div>
-        </div>
+          <div id="pdf-progress" class="progress hidden" aria-live="polite">
+            <div class="progress-bar" id="pdf-progress-bar"></div>
+          </div>
 
-        <div id="discente-revisao" hidden></div>
+          <div id="discente-revisao" hidden></div>
+        </div>
+      </div>
+
+      <div id="aluno-tab-analise" hidden>
         <div id="discente-analise"></div>
       </div>
     </section>

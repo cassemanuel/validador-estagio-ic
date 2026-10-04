@@ -394,6 +394,73 @@ a:hover {
   font-size: 0.9rem;
 }
 
+/* Status "Cursando" em listas de pendências/eletivas */
+.status-cursando-texto {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .status-cursando-texto {
+  color: #22d3ee;
+}
+
+/* Aviso de categorização das eletivas/optativas */
+.categorizacao-aviso {
+  padding: 10px;
+  border-radius: 6px;
+  margin-top: 15px;
+  border: 1px solid var(--status-reprovado-bg);
+  background-color: var(--status-reprovado-bg);
+}
+
+.categorizacao-aviso-icone {
+  color: #d97706;
+  margin-right: 5px;
+}
+
+.categorizacao-aviso-texto {
+  font-size: 0.85rem;
+  color: #92400e;
+}
+
+[data-theme="dark"] .categorizacao-aviso {
+  border-color: #78350f;
+  background-color: #451a03;
+}
+
+[data-theme="dark"] .categorizacao-aviso-icone,
+[data-theme="dark"] .categorizacao-aviso-texto {
+  color: #fbbf24;
+}
+
+/* Tooltip CSS para abas inativas */
+.app-nav.segmented .tab-btn[data-tooltip][disabled] {
+  position: relative;
+}
+
+.app-nav.segmented .tab-btn[data-tooltip][disabled]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background-color: #1f2937;
+  color: #ffffff;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease-in-out;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+}
+
+.app-nav.segmented .tab-btn[data-tooltip][disabled]:hover::after {
+  opacity: 1;
+}
+
 /* ----- Dropzone ----- */
 .dropzone {
   position: relative;
@@ -1775,6 +1842,11 @@ table .btn {
   color: #ffffff;
   border-color: var(--cor-ic1, #344563);
   box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+}
+
+.app-nav.segmented .tab-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 
 [data-theme="dark"] .app-nav.segmented .tab-btn.active {

@@ -24,6 +24,7 @@ const TIPO_EXCECAO = {
   aproveitamento: 'Aproveitamento',
   dispensa: 'Dispensa',
   acordo: 'Solicitar Acordo',
+  outros: 'Outro(s)',
 };
 
 export async function abrirMesa(subId, docInicial = 'boletim') {

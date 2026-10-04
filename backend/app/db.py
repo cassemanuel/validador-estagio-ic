@@ -116,8 +116,8 @@ def _migrar_schemas() -> None:
       `status_anterior` (usada pelo desarquivamento).
     - `decisoes`: CHECK `ck_decisao` sem 'revogada' — sem a migração, a
       revogação falha com IntegrityError (HTTP 500).
-    - `excecoes`: CHECK `ck_excecao_tipo` sem 'acordo' — sem a migração, a
-      submissão com "Solicitar Acordo" falha com IntegrityError.
+    - `excecoes`: CHECK `ck_excecao_tipo` sem 'acordo'/'outros' — sem a
+      migração, a submissão com "Solicitar Acordo" ou "Outro(s)" falha.
     """
     from .models import Decisao, Excecao, Submissao
 
@@ -139,7 +139,7 @@ def _migrar_schemas() -> None:
         _recriar_tabela(
             cur,
             Excecao.__table__,
-            lambda ddl, cols: "'acordo'" not in ddl,
+            lambda ddl, cols: "'acordo'" not in ddl or "'outros'" not in ddl,
         )
         cur.execute("PRAGMA foreign_keys=ON")
         raw.commit()

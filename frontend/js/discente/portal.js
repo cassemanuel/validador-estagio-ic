@@ -62,14 +62,44 @@ export async function initPortal() {
   const statusEl = document.getElementById('discente-status');
   const fluxoEl = document.getElementById('discente-fluxo');
   const btnLimpar = document.getElementById('btn-limpar-documentos');
+  const alunoNav = document.getElementById('aluno-nav');
+  const tabSub = document.getElementById('aluno-tab-submissao');
+  const tabAnalise = document.getElementById('aluno-tab-analise');
+  const btnAnalise = alunoNav?.querySelector('[data-aluno-tab="analise"]');
+
+  const ativarAba = (nome) => {
+    alunoNav?.querySelectorAll('[data-aluno-tab]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.alunoTab === nome);
+    });
+    if (tabSub) tabSub.hidden = nome !== 'submissao';
+    if (tabAnalise) tabAnalise.hidden = nome !== 'analise';
+  };
+
+  const habilitarAnalise = (habilitar) => {
+    if (!btnAnalise) return;
+    btnAnalise.disabled = !habilitar;
+    if (habilitar) {
+      btnAnalise.removeAttribute('data-tooltip');
+    } else {
+      btnAnalise.setAttribute('data-tooltip', 'Ativa somente ao carregar o BOA e o Boletim');
+    }
+  };
 
   initUploads();
+
+  alunoNav?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-aluno-tab]');
+    if (!btn || btn.disabled) return;
+    ativarAba(btn.dataset.alunoTab);
+  });
 
   btnLimpar?.addEventListener('click', () => {
     resetUploadState();
     clearElement(document.getElementById('discente-revisao'));
     clearElement(document.getElementById('discente-analise'));
     document.getElementById('discente-revisao').hidden = true;
+    ativarAba('submissao');
+    habilitarAnalise(false);
   });
 
   try {
@@ -214,6 +244,11 @@ async function handleUpload(tipo, file, { progress, progressBar }) {
       mergeAndDiagnose();
       renderRevisao(revisao);
       renderAnalise(analise);
+      const btnAnalise = document.querySelector('[data-aluno-tab="analise"]');
+      if (btnAnalise) {
+        btnAnalise.disabled = false;
+        btnAnalise.title = '';
+      }
     }
   } catch (err) {
     console.error(err);
@@ -391,7 +426,7 @@ function renderRevisao(container) {
   clearElement(container);
   container.hidden = false;
   const dados = getMergedDados();
-  const { metadata, periodos, pendencias } = dados;
+  const { metadata, pendencias } = dados;
 
   container.appendChild(
     el('div', { className: 'card' }, [
@@ -425,13 +460,10 @@ function renderRevisao(container) {
   }
 
   container.appendChild(renderCicloBasico());
-  container.appendChild(renderDisciplinas(periodos));
-  if (pendencias?.obrigatorias?.length || pendencias?.optativas?.length) {
-    container.appendChild(renderPendencias(pendencias));
-  }
   if (state.diagnostico) {
     container.appendChild(renderDiagnostico(state.diagnostico));
   }
+  container.appendChild(renderJornada());
 
   const erro = el('p', { className: 'login-erro', role: 'alert', hidden: true });
   const btn = el('button', { className: 'btn btn-primary btn-lg', type: 'button', id: 'btn-confirmar-submissao' },
@@ -492,6 +524,11 @@ function renderAnalise(container) {
   clearElement(container);
   const dados = getMergedDados();
   if (!dados.periodos.length) return;
+
+  if (dados.pendencias?.obrigatorias?.length || dados.pendencias?.optativas?.length) {
+    container.appendChild(renderPendencias(dados.pendencias));
+  }
+  container.appendChild(renderDisciplinas(dados.periodos));
 
   const periodosComCR = dados.periodos
     .filter((p) => String(p.periodo).match(/^\d{4}\/\d$/))
@@ -773,11 +810,6 @@ function renderCicloBasico() {
   const faltantes = state.regras
     ? disciplinasFaltantesCicloBasico(dados, state.regras)
     : [];
-  const concluidasCodigos = new Set(
-    (state.regras?.ciclo_basico || [])
-      .filter((r) => !faltantes.some((f) => f.codigo === r.codigo))
-      .map((r) => r.codigo)
-  );
 
   const listaExcecoes = el('ul', { className: 'excecao-list' });
   const redesenharExcecoes = () => {
@@ -802,29 +834,28 @@ function renderCicloBasico() {
     });
   };
 
-  const reqNodes = (state.regras?.ciclo_basico || []).map((req) => {
-    const ok = concluidasCodigos.has(req.codigo);
-    const row = el('li', { className: ok ? 'criterio-ok' : 'criterio-falta' }, [
+  const reqNodes = faltantes.map((req) => {
+    const row = el('li', { className: 'criterio-falta' }, [
       el('i', {
-        className: `bi ${ok ? 'bi-check-circle-fill' : 'bi-exclamation-circle'}`,
+        className: 'bi bi-exclamation-circle',
         'aria-hidden': 'true',
       }),
       el('span', {}, ` ${req.codigo} — ${req.nome} (${req.periodo}º período)`),
     ]);
-    if (!ok) {
-      const btn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Declarar exceção');
-      btn.addEventListener('click', () => abrirFormExcecao(req, listaExcecoes, redesenharExcecoes));
-      row.appendChild(btn);
-    }
+    const btn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Declarar exceção');
+    btn.addEventListener('click', () => abrirFormExcecao(req, listaExcecoes, redesenharExcecoes));
+    row.appendChild(btn);
     return row;
   });
 
   return el('div', { className: 'card' }, [
-    el('h3', {}, 'Ciclo básico (1º–4º período)'),
+    el('h3', {}, 'Ciclo Básico'),
     el('p', { className: 'text-muted' },
       'Disciplina não detectada mas cursada? Declare uma exceção ' +
       '(equivalência, dispensa ou aproveitamento) para a Comissão avaliar.'),
-    el('ul', { className: 'estagio-criterios' }, reqNodes),
+    faltantes.length
+      ? el('ul', { className: 'estagio-criterios' }, reqNodes)
+      : el('p', { className: 'criterio-ok' }, 'Todas as disciplinas do ciclo básico foram concluídas.'),
     listaExcecoes,
   ]);
 }
@@ -833,28 +864,22 @@ function abrirFormExcecao(req, lista, redesenhar) {
   document.querySelector('.excecao-form')?.remove();
 
   const tipo = el('select', { 'aria-label': 'Tipo de exceção' }, [
-    el('option', { value: 'equivalencia' }, 'Equivalência'),
-    el('option', { value: 'aproveitamento' }, 'Aproveitamento'),
-    el('option', { value: 'dispensa' }, 'Dispensa'),
     el('option', { value: 'acordo' }, 'Solicitar Acordo (cursar e concluir no semestre corrente)'),
+    el('option', { value: 'outros' }, 'Outro(s)'),
   ]);
-  const ajudaTipo = el('p', { className: 'text-muted excecao-ajuda' });
-  tipo.addEventListener('change', () => {
-    ajudaTipo.textContent = tipo.value === 'acordo'
-      ? 'Solicitação de acordo para cursar e concluir a disciplina pendente no semestre corrente.'
-      : '';
-  });
+  const ajudaTipo = el('p', { className: 'text-muted excecao-ajuda' },
+    'Solicitação de acordo para cursar e concluir a disciplina pendente no semestre corrente.');
   const codigo = el('input', {
     type: 'text', placeholder: 'Disciplina cursada (ex.: MAE111)', maxLength: '16',
   });
   const just = el('textarea', {
-    placeholder: 'Justificativa (ex.: resolução de equivalência nº ...)',
-    rows: '3', required: true,
+    placeholder: 'Justificativa (máx. 300 palavras)...',
+    rows: '3', maxLength: '2000', required: true,
   });
   const salvar = el('button', { className: 'btn btn-primary btn-sm', type: 'button' }, 'Adicionar');
   const cancelar = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' }, 'Cancelar');
 
-  const form = el('div', { className: 'card excecao-form' }, [
+  const form = el('div', { className: 'card card-aviso excecao-form' }, [
     el('h4', {}, `Exceção para ${req.codigo} — ${req.nome}`),
     el('label', {}, ['Tipo ', tipo, ajudaTipo]),
     el('label', {}, ['Disciplina cursada (se aplicável) ', codigo]),
@@ -1085,10 +1110,27 @@ export function calcularProgressoIntegralizacao(periodos, regras) {
 function renderPendencias(pendencias) {
   const formatarStatus = (status) =>
     STATUS_PENDENCIA[status] || (status ? String(status).replace(/_/g, ' ') : 'Pendente');
+  const statusEl = (status) => {
+    const texto = formatarStatus(status);
+    if (String(status || '').toUpperCase() === 'CURSANDO') {
+      return el('span', { className: 'status-cursando-texto' }, texto);
+    }
+    return document.createTextNode(texto);
+  };
   const itemObr = (d) =>
-    el('li', {}, `${d.codigo || d.nome} — ${formatarStatus(d.status)}`);
-  const itemOpt = (d) =>
-    el('li', {}, `${d.codigo} — ${d.nome}${d.grau ? ` (${d.grau})` : ''}`);
+    el('li', {}, [
+      `${d.codigo || d.nome} — `,
+      statusEl(d.status),
+    ]);
+  const itemOpt = (d) => {
+    const partes = [`${d.codigo} — ${d.nome}`];
+    if (d.grau) partes.push(` (${d.grau})`);
+    if (d.situacao) {
+      partes.push(' — ');
+      partes.push(statusEl(d.situacao));
+    }
+    return el('li', {}, partes);
+  };
 
   // Agrupa obrigatórias pendentes pelo período recomendado do BOA.
   const renderObrigatoriasPorPeriodo = () => {
@@ -1160,14 +1202,12 @@ function renderPendencias(pendencias) {
       : null;
 
   const avisoCategorizacao = el('div', {
-    className: 'card-aviso',
-    style: { padding: '10px', borderRadius: '6px', marginTop: '15px' },
+    className: 'card-aviso categorizacao-aviso',
   }, [
     el('i', {
-      className: 'bi bi-exclamation-triangle',
-      style: { color: '#d97706', marginRight: '5px' },
+      className: 'bi bi-exclamation-triangle categorizacao-aviso-icone',
     }),
-    el('span', { style: { fontSize: '0.85rem', color: '#92400e' } }, [
+    el('span', { className: 'categorizacao-aviso-texto' }, [
       el('strong', {}, 'Aviso:'),
       ' A categorização acima é uma sugestão visual. Confirme se as matérias são realmente eletivas consultando a grade oficial do SIGA ou o seu BOA.',
     ]),
@@ -1179,7 +1219,7 @@ function renderPendencias(pendencias) {
       el('div', {}, [
         el('h4', {}, 'Obrigatórias'),
         (pendencias.obrigatorias || []).length
-          ? renderObrigatoriasPorPeriodo()
+          ? el('div', {}, renderObrigatoriasPorPeriodo())
           : el('p', { className: 'text-muted' }, 'Nenhuma obrigatória pendente.'),
       ]),
       el('div', {}, [
@@ -1214,7 +1254,33 @@ function renderPendencias(pendencias) {
         : 'Estágios de 30h só são permitidos quando faltarem no máximo 10 créditos para conclusão.'),
   ]);
 
-  return el('div', {}, [cardPendencias, cardJornada]);
+  return cardPendencias;
+}
+
+function renderJornada() {
+  const progresso = calcularProgressoIntegralizacao(
+    state.boletim?.historico?.periodos,
+    state.regras
+  );
+  const creditosRestantes = progresso.creditosRestantes;
+
+  return el('div', { className: 'card card-jornada-info' }, [
+    el('strong', {}, 'Jornada de Estágio Permitida (Normas 2025 - Art. 2º):'),
+    el('div', {}, [
+      el('span', {}, 'Créditos restantes para conclusão do curso: '),
+      el('strong', {}, String(creditosRestantes)),
+      ' ',
+      el('span', {
+        className: `badge ${creditosRestantes <= 10 ? 'badge-ap' : 'badge-cursando'}`,
+      }, creditosRestantes <= 10
+        ? 'Elegível para até 30h semanais'
+        : 'Carga horária máxima: 20h semanais'),
+    ]),
+    el('p', { className: 'text-muted jornada-ajuda' },
+      creditosRestantes <= 10
+        ? 'Autorização de 30h permitida por até 6 meses (Art. 2º, §1º).'
+        : 'Estágios de 30h só são permitidos quando faltarem no máximo 10 créditos para conclusão.'),
+  ]);
 }
 
 function renderDiagnostico({ apto, criterios }) {
