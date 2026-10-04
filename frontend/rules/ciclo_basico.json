@@ -2,6 +2,8 @@
   "versao": "PPC 2022 — BCC/UFRJ (Anexo C, Art. 4º — Programa de Estágio)",
   "cr_minimo": 6.0,
   "max_periodos_integralizacao": 14,
+  "extensao_minima_horas": 120,
+  "extensao_ingresso_a_partir": "2025/1",
   "ciclo_basico": [
     { "codigo": "ICP131", "nome": "Programação de Computadores I", "periodo": 1, "aceitos": ["ICP131", "MAB120"], "aceitos_conjunto": [["MAB121", "CMT012"]] },
     { "codigo": "ICP132", "nome": "Processos de Software", "periodo": 1, "aceitos": ["ICP132", "MAB112"] },

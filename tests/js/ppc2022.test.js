@@ -33,7 +33,11 @@ function historicoApto() {
     situacao: 'AP',
   }));
   const h = {
+    metadata: { ingresso: '2023/1' },
     periodos: [{ periodo: '2023/1', disciplinas }],
+    resumoBoa: {
+      extensao: { exigido: 120, cumpridas: 120, faltantes: 0 },
+    },
   };
   h.resumo = calcularCRAcumulado(h);
   return h;
@@ -89,7 +93,7 @@ test('mais de 14 per√≠odos torna inapto', () => {
   assert.equal(criterios[2].ok, false);
 });
 
-test('equivalÍncia combinada MAB121+CMT012 cobre ICP131 e ICP141', () => {
+test('equivalÔøΩncia combinada MAB121+CMT012 cobre ICP131 e ICP141', () => {
   const h = historicoApto();
   const disciplinas = h.periodos[0].disciplinas;
   // Remove ICP131 e ICP141 e adiciona o par combinado MAB121 + CMT012.
@@ -97,20 +101,20 @@ test('equivalÍncia combinada MAB121+CMT012 cobre ICP131 e ICP141', () => {
     (d) => d.codigo !== 'ICP131' && d.codigo !== 'ICP141'
   );
   h.periodos[0].disciplinas.push(
-    { codigo: 'MAB121', nome: 'Matem·tica para ComputaÁ„o', crR: 4, grau: 7.0, pontos: 28, situacao: 'AP' },
-    { codigo: 'CMT012', nome: 'C·lculo para ComputaÁ„o', crR: 4, grau: 7.0, pontos: 28, situacao: 'AP' },
+    { codigo: 'MAB121', nome: 'MatemÔøΩtica para ComputaÔøΩÔøΩo', crR: 4, grau: 7.0, pontos: 28, situacao: 'AP' },
+    { codigo: 'CMT012', nome: 'CÔøΩlculo para ComputaÔøΩÔøΩo', crR: 4, grau: 7.0, pontos: 28, situacao: 'AP' },
   );
   h.resumo = calcularCRAcumulado(h);
   assert.ok(verificarElegibilidadeEstagio(h, regras).apto);
 });
 
-test('apenas metade do par combinado n„o cobre o requisito', () => {
+test('apenas metade do par combinado nÔøΩo cobre o requisito', () => {
   const h = historicoApto();
   h.periodos[0].disciplinas = h.periodos[0].disciplinas.filter(
     (d) => d.codigo !== 'ICP131'
   );
   h.periodos[0].disciplinas.push(
-    { codigo: 'MAB121', nome: 'Matem·tica para ComputaÁ„o', crR: 4, grau: 7.0, pontos: 28, situacao: 'AP' },
+    { codigo: 'MAB121', nome: 'MatemÔøΩtica para ComputaÔøΩÔøΩo', crR: 4, grau: 7.0, pontos: 28, situacao: 'AP' },
   );
   h.resumo = calcularCRAcumulado(h);
   const faltantes = disciplinasFaltantesCicloBasico(h, regras).map((f) => f.codigo);
@@ -127,11 +131,11 @@ test('MAC118 cobre MAE111 e MAC128 cobre MAE992', () => {
   assert.ok(verificarElegibilidadeEstagio(h, regras).apto);
 });
 
-test('ICP249 È o requisito de Tecnologia e Sociedade e ICP354 o cobre', () => {
+test('ICP249 ÔøΩ o requisito de Tecnologia e Sociedade e ICP354 o cobre', () => {
   const codigos = regras.ciclo_basico.map((r) => r.codigo);
-  // CÛdigos inexistentes no PPC 2022 foram removidos da fonte ˙nica.
+  // CÔøΩdigos inexistentes no PPC 2022 foram removidos da fonte ÔøΩnica.
   ['ICP251', 'ICP252', 'ICP253'].forEach((c) =>
-    assert.ok(!codigos.includes(c), `${c} n„o deveria estar no ciclo b·sico`)
+    assert.ok(!codigos.includes(c), `${c} nÔøΩo deveria estar no ciclo bÔøΩsico`)
   );
   const tecsoc = regras.ciclo_basico.find((r) => r.codigo === 'ICP249');
   assert.ok(tecsoc);
@@ -152,4 +156,35 @@ test('ICP111 e MAB111 (legados) cobrem o requisito ICP133', () => {
       `${legado} deveria cobrir ICP133`
     );
   }
+});
+
+test('ingresso 2025/1 requer extens√£o >= 120h para estar apto', () => {
+  const h = historicoApto();
+  h.metadata.ingresso = '2025/1';
+  h.resumoBoa.extensao = { exigido: 120, cumpridas: 60, faltantes: 60 };
+  const { apto, criterios } = verificarElegibilidadeEstagio(h, regras);
+  assert.equal(apto, false);
+  const ext = criterios.find((c) => c.rotulo.includes('Extens√£o'));
+  assert.ok(ext);
+  assert.equal(ext.ok, false);
+});
+
+test('ingresso 2025/1 com 120h de extens√£o mant√©m apto', () => {
+  const h = historicoApto();
+  h.metadata.ingresso = '2025/1';
+  h.resumoBoa.extensao = { exigido: 120, cumpridas: 120, faltantes: 0 };
+  const { apto, criterios } = verificarElegibilidadeEstagio(h, regras);
+  assert.ok(apto);
+  const ext = criterios.find((c) => c.rotulo.includes('Extens√£o'));
+  assert.ok(ext);
+  assert.ok(ext.ok);
+});
+
+test('ingresso anterior a 2025/1 √© isento do requisito de extens√£o', () => {
+  const h = historicoApto();
+  h.metadata.ingresso = '2024/2';
+  delete h.resumoBoa;
+  const { apto, criterios } = verificarElegibilidadeEstagio(h, regras);
+  assert.ok(apto);
+  assert.ok(!criterios.some((c) => c.rotulo.includes('Extens√£o')));
 });

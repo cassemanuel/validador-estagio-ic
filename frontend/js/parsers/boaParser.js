@@ -472,7 +472,9 @@ export function parsePaginaBOA(items, faixas) {
 // Créditos exigidos por grupo de eletivas/optativas (PPC 2022 — BCC).
 // Os totais são fixos: o quadro de Resumo do BOA também lista C.H./horas
 // (ex.: 320h de Extensão), que não devem ser confundidas com créditos.
+// Para Obrigatórias, os valores são extraídos da própria linha do Resumo.
 const CREDITOS_EXIGIDOS = {
+  'obrigatorias': 1000, // teto alto para não descartar C.H. (colunas exigida/cumprida/falta)
   'escolha condicionada': 32,
   'livre escolha': 8,
   'escolha restrita': 4,
@@ -480,6 +482,7 @@ const CREDITOS_EXIGIDOS = {
 
 export function extrairResumoBOA(paginas) {
   const nomes = [
+    ['obrigatorias', /obrigat[oó]rias/i],
     ['escolha condicionada', /escolha\s+condicionada/i],
     ['livre escolha', /livre\s+escolha/i],
     ['escolha restrita', /escolha\s+restrita|humanidades/i],
@@ -487,13 +490,15 @@ export function extrairResumoBOA(paginas) {
 
   const grupos = [];
   let creditosFaltantes = 0;
+  const RESUMO_TOLERANCIA_Y = 30; // janela para achar a linha do rótulo no SIGA
+  const CLUSTER_Y = 5;           // agrupa células numericamente próximas em Y
 
   for (const items of paginas) {
     const escolhidos = [];
     for (const [nomePadrao, regex] of nomes) {
       if (grupos.find((g) => g.nome === nomePadrao)) continue;
 
-      const exigido = CREDITOS_EXIGIDOS[nomePadrao];
+      const exigidoFixo = CREDITOS_EXIGIDOS[nomePadrao];
       let rotulos = items.filter((it) => regex.test(normalize(it.str)));
       if (!rotulos.length) continue;
 
@@ -510,45 +515,120 @@ export function extrairResumoBOA(paginas) {
 
       // Só a ocorrência da tabela de resumo tem números à direita —
       // avalia-se cada uma e prefere-se a que tem.
-      let faltante = exigido;
+      let faltante = exigidoFixo;
+      let exigido = exigidoFixo;
+      let cumprido = 0;
       for (const labelItem of rotulos) {
         // Números da linha, plausíveis como créditos do grupo — valores
-        // acima do teto (ex.: "320" ou "60" de C.H./horas) são ignorados.
+        // acima do teto (ex.: "320" de C.H.) são ignorados; Obrigatórias
+        // têm teto alto porque incluem C.H. total do curso.
         const candidatos = items
           .map((it) => ({ x: it.x, y: it.y, n: parseFloat(it.str) }))
-          .filter((o) => !Number.isNaN(o.n) && o.n >= 0 && o.n <= exigido);
+          .filter((o) => !Number.isNaN(o.n) && o.n >= 0 && o.n <= exigidoFixo);
 
-        // A linha do grupo é a faixa de Y mais próxima do rótulo: tolera
-        // rótulos quebrados em duas linhas ou com Y deslocado das células.
-        const dyMin = candidatos.length
-          ? Math.min(...candidatos.map((o) => Math.abs(o.y - labelItem.y)))
-          : Infinity;
-        const linha = candidatos
-          .filter(
-            (o) => Math.abs(o.y - labelItem.y) <= dyMin + TOLERANCIA_LINHA
-          )
+        // A linha do grupo é a faixa numérica mais próxima do rótulo. Usamos
+        // agrupamento por Y para tolerar células levemente desalinhadas sem
+        // misturar com as outras linhas do quadro de Resumo.
+        const proximos = candidatos.filter(
+          (o) => Math.abs(o.y - labelItem.y) <= RESUMO_TOLERANCIA_Y
+        );
+        const clusters = new Map();
+        for (const o of proximos) {
+          const key = Math.round(o.y / CLUSTER_Y) * CLUSTER_Y;
+          if (!clusters.has(key)) clusters.set(key, []);
+          clusters.get(key).push(o);
+        }
+        const linha = [...clusters.entries()]
+          .sort(
+            (a, b) =>
+              Math.abs(a[0] - labelItem.y) - Math.abs(b[0] - labelItem.y)
+          )[0]?.[1]
           .sort((a, b) => a.x - b.x);
         if (!linha.length) continue;
 
         // "Falta Cumprir" é a última coluna numérica da linha. Prefere-se
         // números à direita do rótulo (tolerância de 20px cobre rótulos
         // longos como "Escolha Restrita Grupo Humanidades", cujo X invade
-        // a 1ª coluna); sem eles, aceita o último número da linha — o
-        // rótulo pode ocupar a margem direita da tabela.
+        // a 1ª coluna); sem eles, aceita o último número da linha.
         const direita = linha.filter((o) => o.x >= labelItem.x - 20);
         const alvo = direita.length ? direita : linha;
-        faltante = alvo[alvo.length - 1].n;
+
+        const last = alvo[alvo.length - 1].n;
+        if (nomePadrao === 'obrigatorias') {
+          // Para Obrigatórias, "Créd. Cumpridos" é o penúltimo número e
+          // "Falta Cumprir" é o último. Exigido = cumprido + faltante.
+          const prev = alvo.length >= 2 ? alvo[alvo.length - 2].n : 0;
+          faltante = last;
+          cumprido = prev;
+          exigido = cumprido + faltante;
+        } else {
+          faltante = last;
+          cumprido = Math.max(0, exigido - faltante);
+        }
         escolhidos.push(labelItem);
         break;
       }
-      const cumprido = Math.max(0, exigido - faltante);
 
       grupos.push({ nome: nomePadrao, exigido, cumprido, faltante });
-      creditosFaltantes += faltante;
+      if (nomePadrao !== 'obrigatorias') {
+        creditosFaltantes += faltante;
+      }
     }
   }
 
-  return { grupos, creditosFaltantes };
+  // Extensão (Art. 4º, IV das Normas 2025): linha abaixo de "Livre escolha".
+  // Colunas esperadas: Exigido | Cumprido | Aproveitado | Falta — a segunda
+  // coluna são as horas cumpridas e a última as horas faltantes.
+  let extensao = { exigido: 120, cumpridas: 0, faltantes: 0 };
+  for (const items of paginas) {
+    const rotulos = items.filter((it) => /extens[ãa]o/i.test(normalize(it.str)));
+    for (const labelItem of rotulos) {
+      const candidatos = items
+        .map((it) => ({ x: it.x, y: it.y, n: parseFloat(it.str) }))
+        .filter((o) => !Number.isNaN(o.n) && o.n >= 0 && o.n <= 10000);
+      const proximos = candidatos.filter(
+        (o) => Math.abs(o.y - labelItem.y) <= RESUMO_TOLERANCIA_Y
+      );
+      const clusters = new Map();
+      for (const o of proximos) {
+        const key = Math.round(o.y / CLUSTER_Y) * CLUSTER_Y;
+        if (!clusters.has(key)) clusters.set(key, []);
+        clusters.get(key).push(o);
+      }
+      const linha = [...clusters.entries()]
+        .sort(
+          (a, b) =>
+            Math.abs(a[0] - labelItem.y) - Math.abs(b[0] - labelItem.y)
+        )[0]?.[1]
+        .sort((a, b) => a.x - b.x);
+      if (linha.length >= 2) {
+        extensao.cumpridas = linha[1].n;
+        extensao.faltantes = linha[linha.length - 1].n;
+        break;
+      }
+    }
+  }
+
+  return { grupos, creditosFaltantes, extensao };
+}
+
+/**
+ * Soma os créditos ainda faltantes para a integralização do curso
+ * (Obrigatórias + Eletivas), usada para decidir o limite semanal de estágio.
+ * @param {{grupos?: Array<{nome: string, faltante: number}>}} resumo
+ * @returns {number|null}
+ */
+export function calcularCreditosRestantes(resumo) {
+  if (!resumo?.grupos) return null;
+  const nomes = [
+    'obrigatorias',
+    'escolha condicionada',
+    'escolha restrita',
+    'livre escolha',
+  ];
+  return resumo.grupos
+    .filter((g) => nomes.includes(g.nome))
+    .reduce((s, g) => s + (Number(g.faltante) || 0), 0);
 }
 
 /**

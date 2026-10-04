@@ -74,11 +74,22 @@ def payload_apto(**overrides):
             "dre": "aluno1",
             "curso": "Ciência da Computação",
             "tipoDocumento": "boa",
+            "ingresso": "2023/1",
         },
         "periodos": [{"periodo": "2023/1", "disciplinas": disciplinas}],
         "pendencias": {"obrigatorias": [], "optativas": []},
         "diagnostico": {"apto": True, "criterios": []},
         "excecoes": [],
+        "resumo_boa": {
+            "extensao": {"exigido": 120, "cumpridas": 120, "faltantes": 0},
+            "grupos": [
+                {"nome": "obrigatorias", "exigido": 120, "cumprido": 120, "faltante": 0},
+                {"nome": "escolha condicionada", "exigido": 32, "cumprido": 32, "faltante": 0},
+                {"nome": "escolha restrita", "exigido": 4, "cumprido": 4, "faltante": 0},
+                {"nome": "livre escolha", "exigido": 8, "cumprido": 8, "faltante": 0},
+            ],
+            "creditosFaltantes": 0,
+        },
     }
     payload.update(overrides)
     return payload

@@ -167,7 +167,11 @@ def criar_submissao(
         tipo_documento=str(body.metadata.get("tipoDocumento") or "") or None,
         metadata_json=json.dumps(body.metadata, ensure_ascii=False),
         dados_extraidos_json=json.dumps(
-            {"periodos": body.periodos, "pendencias": body.pendencias},
+            {
+                "periodos": body.periodos,
+                "pendencias": body.pendencias,
+                "resumo_boa": body.resumo_boa,
+            },
             ensure_ascii=False,
         ),
         diagnostico_json=json.dumps(diagnostico, ensure_ascii=False),

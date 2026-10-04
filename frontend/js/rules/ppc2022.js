@@ -11,6 +11,8 @@
  *     históricas declaradas em cada entrada (`aceitos`).
  *  2. CR acumulado mínimo.
  *  3. Tempo de curso dentro do máximo de períodos de integralização.
+ *  4. Carga Horária de Extensão (Art. 4º, IV) — 120h obrigatórias para
+ *     ingressantes a partir de 2025/1.
  */
 
 import { disciplinaConcluida } from '../domain/cr.js';
@@ -67,17 +69,37 @@ export function disciplinasFaltantesCicloBasico(historyData, regras) {
  * @param {object} regras Conteúdo de ciclo_basico.json
  * @returns {{apto: boolean, criterios: Array<{rotulo: string, ok: boolean, detalhe: string}>}}
  */
+function _ingressoAposOuIgual(ingresso, referencia) {
+  if (!ingresso || !referencia) return false;
+  const [a1, s1] = ingresso.split('/').map(Number);
+  const [a2, s2] = referencia.split('/').map(Number);
+  if (Number.isNaN(a1) || Number.isNaN(s1) || Number.isNaN(a2) || Number.isNaN(s2)) {
+    return false;
+  }
+  return a1 > a2 || (a1 === a2 && s1 >= s2);
+}
+
 export function verificarElegibilidadeEstagio(historyData, regras) {
   const periodos = historyData?.periodos || [];
   const faltantes = disciplinasFaltantesCicloBasico(historyData, regras);
 
   const crMinimo = regras?.cr_minimo ?? 6.0;
   const maxPeriodos = regras?.max_periodos_integralizacao ?? 14;
+  const extensaoMinima = regras?.extensao_minima_horas ?? 120;
+  const extensaoAPartir = regras?.extensao_ingresso_a_partir ?? '2025/1';
 
   const crAcumulado = historyData?.resumo?.crCalculado ?? 0;
   const periodosCursados = new Set(
     periodos.map((p) => String(p.periodo || '').trim()).filter(Boolean)
   ).size;
+  const ingresso = historyData?.metadata?.ingresso || null;
+  const extensao = historyData?.resumoBoa?.extensao || {};
+  const horasCumpridas = Number(extensao.cumpridas) || 0;
+  const horasFaltantes = Number(extensao.faltantes) || 0;
+
+  const extensaoAplicavel = ingresso
+    ? _ingressoAposOuIgual(ingresso, extensaoAPartir)
+    : false;
 
   const criterios = [
     {
@@ -98,6 +120,16 @@ export function verificarElegibilidadeEstagio(historyData, regras) {
       detalhe: `${periodosCursados} períodos cursados (máx. ${maxPeriodos})`,
     },
   ];
+
+  if (extensaoAplicavel) {
+    criterios.push({
+      rotulo: `Carga Horária de Extensão (mínimo ${extensaoMinima}h)`,
+      ok: horasCumpridas >= extensaoMinima,
+      detalhe: horasCumpridas >= extensaoMinima
+        ? `${horasCumpridas}h cumpridas (mínimo ${extensaoMinima}h)`
+        : `${horasCumpridas}h cumpridas — faltam ${horasFaltantes || (extensaoMinima - horasCumpridas)}h (mínimo ${extensaoMinima}h)`,
+    });
+  }
 
   return { apto: criterios.every((c) => c.ok), criterios };
 }

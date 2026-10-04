@@ -25,6 +25,7 @@ class SubmissaoPayload(BaseModel):
     pendencias: dict[str, Any] = Field(default_factory=dict)
     diagnostico: dict[str, Any] = Field(default_factory=dict)
     excecoes: list[ExcecaoIn] = Field(default_factory=list)
+    resumo_boa: dict[str, Any] = Field(default_factory=dict)
 
 
 class DecisaoExcecaoIn(BaseModel):

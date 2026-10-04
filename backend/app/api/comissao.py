@@ -64,6 +64,7 @@ def _serializar_completo(sub: Submissao) -> dict:
     extraidos = json.loads(sub.dados_extraidos_json)
     dados["periodos"] = extraidos.get("periodos") or []
     dados["pendencias"] = extraidos.get("pendencias") or {}
+    dados["resumoBoa"] = extraidos.get("resumo_boa") or {}
     expurgado = sub.pdf_expurgado_em is not None
     dados["documentos"] = {
         "boletim": {

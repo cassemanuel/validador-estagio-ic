@@ -14,6 +14,7 @@ import {
   parseMetadata,
 } from '../../frontend/js/parsers/pdfParser.js';
 import {
+  calcularCreditosRestantes,
   extrairMetadataBOA,
   extrairResumoBOA,
   parsePaginaBOA,
@@ -290,6 +291,43 @@ test('extrairResumoBOA: humanidades — rótulo longo invade a coluna numérica'
   assert.equal(r.cumprido, 4);
 });
 
+test('extrairResumoBOA: extrai Obrigatórias, Extensão e grupos de eletivas', () => {
+  const paginas = [[
+    { str: 'Obrigatórias', x: 10, y: 80 },
+    { str: '300', x: 150, y: 80 },
+    { str: '120', x: 180, y: 80 },
+    { str: '120', x: 210, y: 80 },
+    { str: '0', x: 240, y: 80 },
+    { str: 'Escolha condicionada', x: 10, y: 100 },
+    { str: '32.0', x: 200, y: 100 },
+    { str: '0.0', x: 260, y: 100 },
+    { str: 'Livre escolha', x: 10, y: 120 },
+    { str: '8.0', x: 200, y: 120 },
+    { str: '0.0', x: 260, y: 120 },
+    { str: 'Escolha Restrita Grupo Humanidades', x: 10, y: 140 },
+    { str: '4.0', x: 200, y: 140 },
+    { str: '0.0', x: 260, y: 140 },
+    { str: 'Extensão', x: 10, y: 160 },
+    { str: '120', x: 180, y: 160 },
+    { str: '80', x: 210, y: 160 },
+    { str: '0', x: 270, y: 160 },
+    { str: '40', x: 300, y: 160 },
+  ]];
+  const { grupos, creditosFaltantes, extensao } = extrairResumoBOA(paginas);
+
+  const obr = grupos.find((g) => g.nome === 'obrigatorias');
+  assert.equal(obr.faltante, 0);
+  assert.equal(obr.cumprido, 120);
+
+  const r = grupos.find((g) => g.nome === 'escolha restrita');
+  assert.equal(r.faltante, 0);
+  assert.equal(r.cumprido, 4);
+
+  assert.equal(creditosFaltantes, 0);
+  assert.equal(extensao.cumpridas, 80);
+  assert.equal(extensao.faltantes, 40);
+});
+
 test('extrairResumoBOA: humanidades — linha real com C.H. e créditos', () => {
   // Linha oficial do BOA: "Escolha Restrita Grupo Humanidades 60 4 4.0 60 0.0 0"
   // — os 60 são C.H. (fora do teto de 4 créditos); o último número é o
@@ -308,6 +346,18 @@ test('extrairResumoBOA: humanidades — linha real com C.H. e créditos', () => 
   assert.equal(r.faltante, 0);
   assert.equal(r.cumprido, 4);
   assert.equal(creditosFaltantes, 0);
+});
+
+test('calcularCreditosRestantes soma faltantes de obrigatórias e eletivas', () => {
+  const resumo = {
+    grupos: [
+      { nome: 'obrigatorias', faltante: 12 },
+      { nome: 'escolha condicionada', faltante: 4 },
+      { nome: 'escolha restrita', faltante: 0 },
+      { nome: 'livre escolha', faltante: 0 },
+    ],
+  };
+  assert.equal(calcularCreditosRestantes(resumo), 16);
 });
 
 test('extrairResumoBOA: rótulo deslocado em Y ainda encontra a linha', () => {

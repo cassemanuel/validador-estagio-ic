@@ -9,7 +9,7 @@
 
 import { api } from '../api/client.js';
 import { processarPDF } from '../parsers/pdfParser.js';
-import { processarBOA } from '../parsers/boaParser.js';
+import { calcularCreditosRestantes, processarBOA } from '../parsers/boaParser.js';
 import {
   calcularCRAcumulado,
   extrairPesoDisciplina,
@@ -309,8 +309,12 @@ function mergeAndDiagnose() {
   }
 
   historico.resumo = calcularCRAcumulado(historico);
+  const dadosElegibilidade = {
+    ...historico,
+    resumoBoa: state.boa?.dados?.resumo || {},
+  };
   state.diagnostico = state.regras
-    ? verificarElegibilidadeEstagio(historico, state.regras)
+    ? verificarElegibilidadeEstagio(dadosElegibilidade, state.regras)
     : null;
 }
 
@@ -466,6 +470,7 @@ async function submitDocuments(btn, erro) {
       pendencias: dados.pendencias,
       diagnostico: state.diagnostico || {},
       excecoes: state.excecoes,
+      resumo_boa: state.boa?.dados?.resumo || {},
     }));
     const sub = await api('/api/submissoes', { method: 'POST', form });
     document.getElementById('discente-fluxo').hidden = true;
@@ -1003,6 +1008,15 @@ function renderPendencias(pendencias) {
     ? totalCredExigidos - resumo.creditosFaltantes
     : null;
 
+  const creditosRestantes = calcularCreditosRestantes(resumo);
+  const badge30h = () => {
+    if (creditosRestantes == null) return null;
+    if (creditosRestantes <= 10) {
+      return el('span', { className: 'badge badge-ap' }, 'Elegível para estágio de 30h');
+    }
+    return el('span', { className: 'badge badge-cursando' }, 'Limitado a 20h semanais');
+  };
+
   const renderOptativas = () => {
     if (faltantesCred == null || faltantesCred <= 0) {
       return el('div', { className: 'slot-preenchido' },
@@ -1030,6 +1044,12 @@ function renderPendencias(pendencias) {
       el('div', {}, [
         el('h4', {}, 'Optativas/Eletivas'),
         renderOptativas(),
+        creditosRestantes != null
+          ? el('div', { className: 'mt-1' }, [
+              el('span', {}, `Créditos restantes para formatura: ${creditosRestantes} `),
+              badge30h(),
+            ])
+          : null,
         resumo?.grupos?.length
           ? el('ul', { className: 'slots-eletivas' },
               resumo.grupos.map((g) =>

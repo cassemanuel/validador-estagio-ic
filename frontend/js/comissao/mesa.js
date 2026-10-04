@@ -12,6 +12,7 @@ import {
   formatNumberBR,
 } from '../ui/dom.js';
 import { renderSvgCrEvolution } from '../discente/portal.js';
+import { calcularCreditosRestantes } from '../parsers/boaParser.js';
 import { carregarPainel, dialogConfirmar } from './painel.js';
 import { navegarPara } from '../router.js';
 
@@ -241,6 +242,24 @@ function renderLadoDados(sub) {
               el('span', {}, ` ${c.rotulo} — ${c.detalhe}`),
             ])
           )),
+      ])
+    );
+  }
+
+  const creditosRestantes = calcularCreditosRestantes(sub.resumoBoa);
+  if (creditosRestantes != null) {
+    const badge30h = creditosRestantes <= 10
+      ? el('span', { className: 'badge badge-ap' }, 'Elegível para estágio de 30h')
+      : el('span', { className: 'badge badge-cursando' }, 'Limitado a 20h semanais');
+    col.appendChild(
+      el('div', { className: 'card' }, [
+        el('h4', {}, 'Integralização do curso'),
+        el('p', {}, [
+          el('strong', {}, 'Créditos restantes para formatura: '),
+          String(creditosRestantes),
+          ' ',
+          badge30h,
+        ]),
       ])
     );
   }

@@ -83,17 +83,39 @@ def disciplinas_faltantes(historico: dict, regras: dict) -> list[dict]:
     ]
 
 
+def _ingresso_apos_ou_igual(ingresso: str | None, referencia: str) -> bool:
+    if not ingresso or not referencia:
+        return False
+    try:
+        a1, s1 = (int(p) for p in ingresso.split("/"))
+        a2, s2 = (int(p) for p in referencia.split("/"))
+    except ValueError:
+        return False
+    return a1 > a2 or (a1 == a2 and s1 >= s2)
+
+
 def verificar_elegibilidade(historico: dict, regras: dict) -> dict:
     """Reavalia a elegibilidade declarada pelo cliente (sanity check)."""
     periodos = historico.get("periodos") or []
     faltantes = disciplinas_faltantes(historico, regras)
     cr_minimo = regras.get("cr_minimo", 6.0)
     max_periodos = regras.get("max_periodos_integralizacao", 14)
+    extensao_minima = regras.get("extensao_minima_horas", 120)
+    extensao_a_partir = regras.get("extensao_ingresso_a_partir", "2025/1")
 
-    _, _, cr = cr_acumulado(_todas_disciplinas(historico))
+    cr_r, pontos, cr = cr_acumulado(_todas_disciplinas(historico))
     periodos_cursados = len(
         {str(p.get("periodo") or "").strip() for p in periodos if p.get("periodo")}
     )
+
+    metadata = historico.get("metadata") or {}
+    ingresso = metadata.get("ingresso")
+    resumo_boa = historico.get("resumo_boa") or {}
+    extensao = resumo_boa.get("extensao") or {}
+    horas_cumpridas = _num(extensao.get("cumpridas")) or 0.0
+    horas_faltantes = _num(extensao.get("faltantes")) or 0.0
+
+    extensao_aplicavel = _ingresso_apos_ou_igual(ingresso, extensao_a_partir)
 
     criterios = [
         {
@@ -117,4 +139,20 @@ def verificar_elegibilidade(historico: dict, regras: dict) -> dict:
             "detalhe": f"{periodos_cursados} períodos cursados (máx. {max_periodos})",
         },
     ]
+
+    if extensao_aplicavel:
+        criterios.append(
+            {
+                "rotulo": f"Carga Horária de Extensão (mínimo {extensao_minima}h)",
+                "ok": horas_cumpridas >= extensao_minima,
+                "detalhe": (
+                    f"{horas_cumpridas:.0f}h cumpridas (mínimo {extensao_minima}h)"
+                    if horas_cumpridas >= extensao_minima
+                    else f"{horas_cumpridas:.0f}h cumpridas — faltam "
+                    f"{horas_faltantes or (extensao_minima - horas_cumpridas):.0f}h "
+                    f"(mínimo {extensao_minima}h)"
+                ),
+            }
+        )
+
     return {"apto": all(c["ok"] for c in criterios), "criterios": criterios}
