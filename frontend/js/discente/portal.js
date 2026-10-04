@@ -18,6 +18,7 @@ import {
 import {
   carregarRegras,
   disciplinasFaltantesCicloBasico,
+  disciplinasObrigatoriasFaltantes,
   verificarElegibilidadeEstagio,
 } from '../rules/ppc2022.js';
 import {
@@ -939,19 +940,35 @@ function disciplinaAprovada(d) {
   return sit === 'AP' || sit === 'T' || sit === 'A' || sit === 'NCC' || sit === 'NCG';
 }
 
-function getCodigosCicloBasico() {
-  const regras = state.regras || {};
-  const codigos = new Set();
-  (regras.ciclo_basico || []).forEach((r) => {
-    codigos.add(String(r.codigo || '').trim().toUpperCase());
-    (r.aceitos || []).forEach((a) => codigos.add(String(a || '').trim().toUpperCase()));
-    (r.aceitos_conjunto || []).flat().forEach((a) => codigos.add(String(a || '').trim().toUpperCase()));
+function _adicionarCodigosDeLista(lista, destino) {
+  (lista || []).forEach((r) => {
+    destino.add(String(r.codigo || '').trim().toUpperCase());
+    (r.aceitos || []).forEach((a) =>
+      destino.add(String(a || '').trim().toUpperCase())
+    );
+    (r.aceitos_conjunto || []).flat().forEach((a) =>
+      destino.add(String(a || '').trim().toUpperCase())
+    );
   });
+}
+
+function getCodigosCicloBasico() {
+  const codigos = new Set();
+  _adicionarCodigosDeLista(state.regras?.ciclo_basico, codigos);
+  return codigos;
+}
+
+function getCodigosObrigatorias() {
+  const codigos = new Set();
+  // Lista global de obrigatórias do curso (básico + avançado).
+  _adicionarCodigosDeLista(state.regras?.obrigatorias, codigos);
+  // Fallback de compatibilidade caso o JSON só tenha ciclo_basico.
+  _adicionarCodigosDeLista(state.regras?.ciclo_basico, codigos);
   return codigos;
 }
 
 function getOptativasCursadas(pendencias) {
-  const obrigatorias = getCodigosCicloBasico();
+  const obrigatorias = getCodigosObrigatorias();
   const catalogo = new Set(
     (pendencias.optativas || [])
       .map((o) => String(o.codigo || '').trim().toUpperCase())
@@ -998,12 +1015,22 @@ const STATUS_PENDENCIA = {
 function calcularCreditosEletivasPorBoletim(periodos, regras) {
   if (!regras) return 0;
   const obrigatorias = new Set();
-  for (const req of regras.ciclo_basico || []) {
-    obrigatorias.add(String(req.codigo || '').trim().toUpperCase());
-    (req.aceitos || []).forEach((cod) =>
-      obrigatorias.add(String(cod || '').trim().toUpperCase())
-    );
-  }
+  const adicionar = (lista) => {
+    for (const req of lista || []) {
+      obrigatorias.add(String(req.codigo || '').trim().toUpperCase());
+      (req.aceitos || []).forEach((cod) =>
+        obrigatorias.add(String(cod || '').trim().toUpperCase())
+      );
+      (req.aceitos_conjunto || []).flat().forEach((cod) =>
+        obrigatorias.add(String(cod || '').trim().toUpperCase())
+      );
+    }
+  };
+  // Lista global de obrigatórias (ciclo básico + avançado).
+  adicionar(regras.obrigatorias);
+  // Fallback de compatibilidade caso o JSON só possua ciclo_basico.
+  adicionar(regras.ciclo_basico);
+
   let total = 0;
   for (const p of periodos || []) {
     for (const d of p.disciplinas || []) {
@@ -1032,7 +1059,7 @@ function calcularCreditosEletivasPorBoletim(periodos, regras) {
  * }}
  */
 export function calcularProgressoIntegralizacao(periodos, regras) {
-  const obrigatoriasFaltantes = disciplinasFaltantesCicloBasico(
+  const obrigatoriasFaltantes = disciplinasObrigatoriasFaltantes(
     { periodos },
     regras
   );

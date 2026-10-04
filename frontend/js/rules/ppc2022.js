@@ -41,6 +41,27 @@ export async function carregarRegras(forcar = false) {
  * @returns {Array<{codigo: string, nome: string, periodo: number, aceitos: string[]}>}
  */
 export function disciplinasFaltantesCicloBasico(historyData, regras) {
+  return _disciplinasObrigatoriasFaltantes(historyData, regras?.ciclo_basico || []);
+}
+
+/**
+ * Retorna as disciplinas obrigatórias do curso (ciclo básico + avançado)
+ * ainda não concluídas. Usada para calcular créditos restantes para
+ * integralização (e, consequentemente, a jornada de estágio).
+ *
+ * @param {object} historyData
+ * @param {object} regras
+ * @returns {Array<object>}
+ */
+export function disciplinasObrigatoriasFaltantes(historyData, regras) {
+  const lista =
+    regras?.obrigatorias?.length
+      ? regras.obrigatorias
+      : (regras?.ciclo_basico || []);
+  return _disciplinasObrigatoriasFaltantes(historyData, lista);
+}
+
+function _disciplinasObrigatoriasFaltantes(historyData, lista) {
   const disciplinas = (historyData?.periodos || []).flatMap((p) => p.disciplinas || []);
   const codigosConcluidos = new Set(
     disciplinas
@@ -48,7 +69,7 @@ export function disciplinasFaltantesCicloBasico(historyData, regras) {
       .map((d) => String(d.codigo || '').trim().toUpperCase())
   );
 
-  return (regras?.ciclo_basico || []).filter((req) => {
+  return lista.filter((req) => {
     const direta = (req.aceitos || [req.codigo]).some((cod) =>
       codigosConcluidos.has(cod)
     );

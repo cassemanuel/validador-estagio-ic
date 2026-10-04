@@ -254,6 +254,22 @@ test('calcularProgressoIntegralizacao: créditos eletivos via Boletim (SSOT)', (
   assert.equal(progresso.faltantesEletivas, 40);
 });
 
+test('calcularProgressoIntegralizacao: obrigatórias avançadas não contam como eletivas', () => {
+  const periodos = [
+    {
+      periodo: '2024/2',
+      disciplinas: [
+        { codigo: 'ICP350', situacao: 'AP', crR: 4, grau: 8.0 },
+        { codigo: 'ICP353', situacao: 'AP', crR: 4, grau: 7.5 },
+        { codigo: 'ICP361', situacao: 'AP', crR: 4, grau: 7.0 },
+      ],
+    },
+  ];
+  const progresso = calcularProgressoIntegralizacao(periodos, regras);
+  assert.equal(progresso.creditosEletivasCumpridos, 0);
+  assert.equal(progresso.faltantesEletivas, 44);
+});
+
 test('coluna BOA concluída sem status de pendência gera cumprido', () => {
   const itens = [
     { str: 'ICP131', x: 100, y: 26 },
