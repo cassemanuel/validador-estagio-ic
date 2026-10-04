@@ -2704,3 +2704,8 @@ th {
 .card-autorizacao {
   border-left: 4px solid var(--status-ap);
 }
+
+/* Espaçamento entre a busca e a tabela na página de Autorizados */
+.autorizacoes-secao .input-busca {
+  margin-bottom: var(--spacing-md);
+}

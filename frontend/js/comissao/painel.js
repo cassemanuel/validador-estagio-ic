@@ -681,7 +681,6 @@ async function carregarAutorizacoesLista(status, append = false) {
   }
 
   if (!append) {
-    clearElement(container);
     params.offset = 0;
   }
 
@@ -699,6 +698,8 @@ async function carregarAutorizacoesLista(status, append = false) {
       ]);
       container.appendChild(el('div', { className: 'card table-container' }, [table]));
       tbody = table.querySelector('tbody');
+    } else if (!append) {
+      clearElement(tbody);
     }
 
     if (!lista.length && !append) {
