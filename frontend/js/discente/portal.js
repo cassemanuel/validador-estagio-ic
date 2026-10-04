@@ -12,6 +12,7 @@ import { processarPDF } from '../parsers/pdfParser.js';
 import { calcularCreditosRestantes, processarBOA } from '../parsers/boaParser.js';
 import {
   calcularCRAcumulado,
+  disciplinaConcluida,
   extrairPesoDisciplina,
 } from '../domain/cr.js';
 import {
@@ -994,19 +995,44 @@ const STATUS_PENDENCIA = {
   cursando: 'Cursando',
 };
 
+function calcularCreditosEletivasPorBoletim(periodos, regras) {
+  if (!regras) return 0;
+  const obrigatorias = new Set();
+  for (const req of regras.ciclo_basico || []) {
+    obrigatorias.add(String(req.codigo || '').trim().toUpperCase());
+    (req.aceitos || []).forEach((cod) =>
+      obrigatorias.add(String(cod || '').trim().toUpperCase())
+    );
+  }
+  let total = 0;
+  for (const p of periodos || []) {
+    for (const d of p.disciplinas || []) {
+      if (!disciplinaConcluida(d)) continue;
+      const cod = String(d.codigo || '').trim().toUpperCase();
+      if (obrigatorias.has(cod)) continue;
+      total += Number(d.crR) || 0;
+    }
+  }
+  return total;
+}
+
 function renderPendencias(pendencias) {
   const formatarStatus = (status) =>
     STATUS_PENDENCIA[status] || (status ? String(status).replace(/_/g, ' ') : 'Pendente');
   const itemObr = (d) =>
     el('li', {}, `${d.codigo || d.nome} — ${formatarStatus(d.status)}`);
 
-  // Optativas: cálculo por saldo de créditos extraído do Resumo do BOA.
+  // Optativas: validação cruzada entre BOA e Boletim.
   const resumo = state.boa?.dados?.resumo;
-  const faltantesCred = resumo?.creditosFaltantes ?? null;
   const totalCredExigidos = 44; // 32 + 8 + 4 conforme PPC 2022 / BOA
-  const totalCredCumpridos = resumo
-    ? totalCredExigidos - resumo.creditosFaltantes
-    : null;
+  const creditosEletivasBoletim = calcularCreditosEletivasPorBoletim(
+    state.boletim?.historico?.periodos,
+    state.regras
+  );
+  const eletivasConcluidas =
+    resumo?.creditosFaltantes === 0 || creditosEletivasBoletim >= totalCredExigidos;
+  const faltantesCred = resumo?.creditosFaltantes ??
+    Math.max(0, totalCredExigidos - creditosEletivasBoletim);
 
   const creditosRestantes = calcularCreditosRestantes(resumo);
   const badge30h = () => {
@@ -1018,7 +1044,7 @@ function renderPendencias(pendencias) {
   };
 
   const renderOptativas = () => {
-    if (faltantesCred == null || faltantesCred <= 0) {
+    if (eletivasConcluidas) {
       return el('div', { className: 'slot-preenchido' },
         `Eletivas e Optativas Concluídas (${totalCredExigidos}/${totalCredExigidos} créditos)`);
     }
@@ -1030,6 +1056,13 @@ function renderPendencias(pendencias) {
     const creditosTexto = partes.join('; ') || `Faltam ${faltantesCred} créditos`;
     return el('div', { className: 'slot-vago' }, `${creditosTexto} (de ${totalCredExigidos} créditos exigidos)`);
   };
+
+  const ordemEletivas = ['escolha condicionada', 'escolha restrita', 'livre escolha'];
+  const gruposEletivos = (resumo?.grupos || [])
+    .filter((g) => ordemEletivas.includes(g.nome))
+    .sort(
+      (a, b) => ordemEletivas.indexOf(a.nome) - ordemEletivas.indexOf(b.nome)
+    );
 
   return el('div', { className: 'card' }, [
     el('h3', {}, 'Pendências detectadas (BOA)'),
@@ -1050,9 +1083,9 @@ function renderPendencias(pendencias) {
               badge30h(),
             ])
           : null,
-        resumo?.grupos?.length
+        gruposEletivos.length
           ? el('ul', { className: 'slots-eletivas' },
-              resumo.grupos.map((g) =>
+              gruposEletivos.map((g) =>
                 el('li', { className: g.faltante <= 0 ? 'slot-preenchido' : 'slot-vago' },
                   `${g.nome}: ${g.cumprido}/${g.exigido} créditos`)
               ))
