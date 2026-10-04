@@ -122,9 +122,12 @@ function initAutorizacoes() {
     if (input && !input.dataset.bound) {
       input.dataset.bound = '1';
       input.addEventListener('input', () => {
-        autorizacoesParams[status].q = input.value.trim();
-        autorizacoesParams[status].offset = 0;
-        carregarAutorizacoesLista(status, false);
+        clearTimeout(input._debounce);
+        input._debounce = setTimeout(() => {
+          autorizacoesParams[status].q = input.value.trim();
+          autorizacoesParams[status].offset = 0;
+          carregarAutorizacoesLista(status, false);
+        }, 250);
       });
     }
   };
@@ -577,7 +580,7 @@ async function carregarMetricasAutorizacoes() {
 
   let m;
   try {
-    m = await api('/api/comissao/autorizacoes/metricas');
+    m = await api('/api/autorizacoes/metricas');
   } catch {
     return;
   }
@@ -669,12 +672,20 @@ async function carregarAutorizacoesLista(status, append = false) {
   const btnMais = document.getElementById(`autorizacoes-mais-${status}`);
   if (!container) return;
 
+  let podeRevogar = false;
+  try {
+    const user = await api('/api/auth/me');
+    podeRevogar = user?.papel === 'comissao';
+  } catch {
+    podeRevogar = false;
+  }
+
   if (!append) {
     clearElement(container);
     params.offset = 0;
   }
 
-  const url = `/api/comissao/autorizacoes?status=${apiStatus}&offset=${params.offset}&limite=${params.limite}${params.q ? `&q=${encodeURIComponent(params.q)}` : ''}`;
+  const url = `/api/autorizacoes?status=${apiStatus}&offset=${params.offset}&limite=${params.limite}${params.q ? `&q=${encodeURIComponent(params.q)}` : ''}`;
 
   try {
     const resp = await api(url);
@@ -698,7 +709,7 @@ async function carregarAutorizacoesLista(status, append = false) {
       );
     } else {
       lista.forEach((a) =>
-        tbody.appendChild(renderLinhaAutorizacao(a, status === 'vigentes'))
+        tbody.appendChild(renderLinhaAutorizacao(a, status === 'vigentes' && podeRevogar))
       );
     }
 

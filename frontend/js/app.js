@@ -135,6 +135,11 @@ function mostrarLogin() {
     headerNav.hidden = true;
     headerNav.style.display = 'none';
   }
+  const publicNav = document.getElementById('header-nav-public');
+  if (publicNav) {
+    publicNav.hidden = true;
+    publicNav.style.display = 'none';
+  }
   history.replaceState({ view: 'login' }, '', '/login');
 }
 
@@ -151,12 +156,24 @@ async function mostrarApp(user, pushState = true) {
     headerNav.style.display = visivel ? 'flex' : 'none';
   }
 
+  const publicNav = document.getElementById('header-nav-public');
+  if (publicNav) {
+    publicNav.hidden = false;
+    publicNav.style.display = 'flex';
+  }
+
   const homeLink = document.getElementById('header-home-link');
   if (homeLink) {
     homeLink.href = user.papel === 'comissao' ? '/admin/dashboard' : '/aluno';
   }
 
   const caminho = rotaAtual();
+  if (caminho === '/autorizados') {
+    mostrarView('view-admin-autorizacoes');
+    await initPainel('view-admin-autorizacoes');
+    if (pushState) history.pushState({ view: 'view-admin-autorizacoes' }, '', caminho);
+    return;
+  }
   if (user.papel === 'comissao') {
     if (caminho.startsWith('/admin')) {
       const view = caminho === '/admin/fila' ? 'view-admin-fila'
@@ -212,6 +229,11 @@ async function aplicarRota(caminho) {
     if (pathname === '/aluno' || pathname === '/portal') {
       mostrarView('view-discente');
       await initPortal();
+      return;
+    }
+    if (pathname === '/autorizados') {
+      mostrarView('view-admin-autorizacoes');
+      await initPainel('view-admin-autorizacoes');
       return;
     }
     if (pathname.startsWith('/admin') && user.papel === 'comissao') {

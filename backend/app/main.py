@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 
-from .api import auth_routes, comissao, submissoes
+from .api import auth_routes, autorizacoes, comissao, submissoes
 from .config import settings
 from .db import SessionLocal, init_db
 from .services.expurgo import purge_loop
@@ -32,6 +32,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(auth_routes.router)
 app.include_router(submissoes.router)
 app.include_router(comissao.router)
+app.include_router(autorizacoes.router)
 
 
 @app.get("/api/health")

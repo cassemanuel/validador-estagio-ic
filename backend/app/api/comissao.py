@@ -185,17 +185,15 @@ def auditoria(
     }
 
 
-@router.get("/autorizacoes")
-def autorizacoes(
-    ano: int | None = Query(None, ge=2000, le=2100),
-    status: str | None = Query(None, pattern="^(vigente|expirada)$"),
-    offset: int = Query(0, ge=0),
-    limite: int = Query(10, ge=1, le=200),
-    q: str | None = Query(None, max_length=100),
-    db: Session = Depends(get_db),
-    _=Depends(require_comissao),
-):
-    """Liberações deferidas com validade, paginação e busca por DRE/nome."""
+def _listar_autorizacoes(
+    db: Session,
+    ano: int | None,
+    status: str | None,
+    offset: int,
+    limite: int,
+    q: str | None,
+) -> dict:
+    """Corpo comum da listagem de autorizações (reutilizado em endpoints público e comissão)."""
     subs = (
         db.query(Submissao)
         .filter(Submissao.status == "aprovada")
@@ -243,6 +241,20 @@ def autorizacoes(
         "offset": offset,
         "limite": limite,
     }
+
+
+@router.get("/autorizacoes")
+def autorizacoes(
+    ano: int | None = Query(None, ge=2000, le=2100),
+    status: str | None = Query(None, pattern="^(vigente|expirada)$"),
+    offset: int = Query(0, ge=0),
+    limite: int = Query(10, ge=1, le=200),
+    q: str | None = Query(None, max_length=100),
+    db: Session = Depends(get_db),
+    _=Depends(require_comissao),
+):
+    """Liberações deferidas com validade, paginação e busca por DRE/nome."""
+    return _listar_autorizacoes(db, ano, status, offset, limite, q)
 
 
 @router.get("/autorizacoes/metricas")
