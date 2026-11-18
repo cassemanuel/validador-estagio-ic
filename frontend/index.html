@@ -30,10 +30,10 @@
         <span>Comissão de Estágio — IC / UFRJ</span>
       </div>
     </a>
-    <nav class="header-nav" id="header-nav-public" hidden style="display: none;">
+    <nav class="header-nav" id="header-nav-public" aria-label="Portal público" hidden>
       <a href="/autorizados" data-spa class="nav-link">Autorizados</a>
     </nav>
-    <nav class="header-nav" id="header-nav" hidden style="display: none;">
+    <nav class="header-nav" id="header-nav" aria-label="Comissão de Estágio" hidden>
       <a href="/admin/dashboard" data-spa class="nav-link">Dashboard</a>
       <a href="/admin/fila" data-spa class="nav-link">Fila</a>
       <a href="/admin/mesa" data-spa class="nav-link">Mesa</a>
@@ -231,7 +231,7 @@
       </nav>
 
       <div class="fila-toolbar">
-        <input type="search" id="fila-busca" class="input-busca" placeholder="Buscar por nome ou DRE..." />
+        <input type="search" id="fila-busca" class="input-busca" placeholder="Buscar por nome ou DRE..." aria-label="Buscar processos por nome ou DRE" />
         <label class="fila-status-label" for="fila-status">Status:</label>
         <select id="fila-status" class="input-busca">
           <option value="todos" selected>Todas</option>
@@ -271,6 +271,7 @@
           class="input-busca"
           type="search"
           placeholder="Buscar por DRE ou nome"
+          aria-label="Buscar autorizações válidas por DRE ou nome"
         />
         <div id="autorizacoes-lista-vigentes"></div>
         <button id="autorizacoes-mais-vigentes" class="btn btn-secondary btn-sm" type="button">Carregar Mais</button>
@@ -283,6 +284,7 @@
           class="input-busca"
           type="search"
           placeholder="Buscar por DRE ou nome"
+          aria-label="Buscar autorizações expiradas por DRE ou nome"
         />
         <div id="autorizacoes-lista-expiradas"></div>
         <button id="autorizacoes-mais-expiradas" class="btn btn-secondary btn-sm" type="button">Carregar Mais</button>
@@ -326,7 +328,7 @@
   </footer>
 
   <!-- Modal genérico de confirmação (motivo/aviso) -->
-  <dialog id="modal-confirmar" class="modal">
+  <dialog id="modal-confirmar" class="modal" aria-labelledby="modal-confirmar-titulo">
     <div class="modal-content">
       <header class="modal-header">
         <h2 id="modal-confirmar-titulo">Confirmar ação</h2>
@@ -351,10 +353,10 @@
   </dialog>
 
   <!-- Modal "Sobre o Projeto" -->
-  <dialog id="modal-sobre" class="modal">
+  <dialog id="modal-sobre" class="modal" aria-labelledby="modal-sobre-titulo">
     <div class="modal-content">
       <header class="modal-header">
-        <h2>Sobre o Validador de Estágio</h2>
+        <h2 id="modal-sobre-titulo">Sobre o Validador de Estágio</h2>
         <button type="button" id="modal-sobre-fechar" class="btn-icon" aria-label="Fechar">
           <i class="bi bi-x-lg" aria-hidden="true"></i>
         </button>
@@ -390,10 +392,10 @@
   </dialog>
 
   <!-- Modal "Arquitetura, Segurança e Melhorias Futuras" -->
-  <dialog id="modal-arquitetura" class="modal modal-wide">
+  <dialog id="modal-arquitetura" class="modal modal-wide" aria-labelledby="modal-arquitetura-titulo">
     <div class="modal-content">
       <header class="modal-header">
-        <h2>Arquitetura, Segurança e Melhorias Futuras</h2>
+        <h2 id="modal-arquitetura-titulo">Arquitetura, Segurança e Melhorias Futuras</h2>
         <button type="button" id="modal-arquitetura-fechar" class="btn-icon" aria-label="Fechar">
           <i class="bi bi-x-lg" aria-hidden="true"></i>
         </button>

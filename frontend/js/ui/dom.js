@@ -115,6 +115,34 @@ export function badgeClassForSituacao(situacao) {
 }
 
 /**
+ * Prepara uma tabela para o layout em cartões do mobile (CSS em
+ * `.triage-table` abaixo de 640px): copia o texto de cada cabeçalho para o
+ * `data-label` das células e fixa os papéis ARIA de tabela, que alguns
+ * leitores de tela descartam quando o CSS troca o `display` das linhas.
+ * Idempotente: pode ser chamada de novo após anexar linhas.
+ * @param {HTMLTableElement} table
+ * @returns {HTMLTableElement}
+ */
+export function tabelaResponsiva(table) {
+  const rotulos = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+  table.setAttribute('role', 'table');
+  table.querySelectorAll('thead, tbody').forEach((g) => g.setAttribute('role', 'rowgroup'));
+  table.querySelectorAll('tr').forEach((tr) => tr.setAttribute('role', 'row'));
+  table.querySelectorAll('thead th').forEach((th) => th.setAttribute('role', 'columnheader'));
+  table.querySelectorAll('tbody tr').forEach((tr) => {
+    let coluna = 0;
+    [...tr.children].forEach((td) => {
+      td.setAttribute('role', 'cell');
+      const span = Number(td.getAttribute('colspan')) || 1;
+      // Células que ocupam a linha inteira (estado vazio) não ganham rótulo.
+      if (span === 1 && rotulos[coluna]) td.dataset.label = rotulos[coluna];
+      coluna += span;
+    });
+  });
+  return table;
+}
+
+/**
  * Limpa o conteúdo de um elemento.
  * @param {HTMLElement} element
  */

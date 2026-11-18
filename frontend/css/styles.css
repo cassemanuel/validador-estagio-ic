@@ -41,14 +41,14 @@
   --btn-primary-bg-hover: #2a3749;
   --btn-primary-text: #ffffff;
 
-  /* Estados semânticos */
-  --status-ap: #16a34a;
+  /* Estados semânticos — tons 700 garantem >= 4.5:1 sobre os fundos -bg */
+  --status-ap: #15803d;
   --status-ap-bg: #dcfce7;
-  --status-cursando: #3b82f6;
+  --status-cursando: #1d4ed8;
   --status-cursando-bg: #dbeafe;
-  --status-reprovado: #ea580c;
+  --status-reprovado: #c2410c;
   --status-reprovado-bg: #ffedd5;
-  --status-neutro: #64748b;
+  --status-neutro: #475569;
   --status-neutro-bg: #f1f5f9;
   --status-ciano: #0891b2;
   --status-ciano-bg: #cffafe;
@@ -66,6 +66,16 @@
   /* Transições */
   --transition-fast: 150ms ease;
   --transition-base: 250ms ease;
+
+  /* Acessibilidade: anel de foco (>= 3:1 sobre os fundos) e texto de
+     destaque/links em botões textuais */
+  --focus-ring: #1d4ed8;
+  --accent-text: var(--cor-ic1);
+  --accent-text-hover: #1e2a3d;
+
+  /* Gráfico de evolução do CR */
+  --chart-acum: #344563;
+  --chart-periodo: #7c3aed;
 }
 
 /* ----- Variáveis: Dark Mode ----- */
@@ -103,6 +113,15 @@
   --status-neutro-bg: #334155;
   --status-ciano: #22d3ee;
   --status-ciano-bg: #164e63;
+
+  --focus-ring: #93c5fd;
+  --accent-text: #8fa6cc;
+  --accent-text-hover: #b4c4de;
+
+  --chart-acum: #60a5fa;
+
+  /* Controles nativos (busca, scrollbars, select) no esquema escuro */
+  color-scheme: dark;
 }
 
 /* ----- Reset e base ----- */
@@ -130,12 +149,12 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   font-weight: 700;
-  margin: 0 0 var(--spacing-md);
+  margin: 0 0 var(--spacing-lg);
   color: var(--text-primary);
 }
 
 p {
-  margin: 0 0 var(--spacing-md);
+  margin: 0 0 var(--spacing-lg);
 }
 
 a {
@@ -156,6 +175,25 @@ a:hover {
 .hidden,
 [hidden] {
   display: none !important;
+}
+
+/* Conteúdo só para leitores de tela (ex.: regiões aria-live). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ----- Foco visível (navegação por teclado) ----- */
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .text-muted {
@@ -370,7 +408,8 @@ a:hover {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
+  padding: var(--spacing-xl);
+  margin-bottom: var(--spacing-xl);
   box-shadow: var(--shadow-sm);
   transition: background-color var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-fast);
 }
@@ -385,6 +424,11 @@ a:hover {
   gap: var(--spacing-sm);
   border-color: var(--status-reprovado);
   background-color: var(--status-reprovado-bg);
+}
+
+/* Avisos soltos (fora de .card) mantêm o espaçamento compacto; os que são
+   cards herdam o margin-bottom padrão de .card. */
+.card-aviso:not(.card) {
   margin-bottom: var(--spacing-md);
 }
 
@@ -723,38 +767,40 @@ tbody tr:hover {
 }
 
 /* ----- Gráfico de evolução (SVG) ----- */
+.chart-wrap {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+}
+
 .chart-svg {
   width: 100%;
+  min-width: 600px;
   height: auto;
   display: block;
   overflow: visible;
 }
 
 .chart-grid-line {
-  stroke: var(--divider-color);
+  stroke: var(--border-color);
   stroke-width: 1;
   stroke-dasharray: 2 4;
 }
 
+.chart-ref-line {
+  stroke: #f59e0b;
+  stroke-width: 2;
+  stroke-dasharray: 4 2;
+}
+
 .chart-label {
-  fill: var(--text-muted);
   font-family: var(--font-body);
-  font-size: 11px;
 }
 
-:root {
-  --chart-acum: #344563;
-  --chart-periodo: #f59e0b;
-}
-
-[data-theme="dark"] {
-  --chart-acum: #60a5fa;
-  --chart-periodo: #fbbf24;
-}
-
+.chart-label,
 .chart-label-x {
-  font-size: 10px;
   fill: var(--text-muted);
+  font-size: 12px;
 }
 
 .chart-line {
@@ -771,50 +817,56 @@ tbody tr:hover {
 .chart-line-periodo {
   stroke: var(--chart-periodo);
   stroke-width: 2;
-  stroke-dasharray: 4 4;
-}
-
-.chart-wrap {
-  position: relative;
+  stroke-dasharray: 5 5;
 }
 
 .chart-dot {
-  cursor: pointer;
+  fill: var(--chart-acum);
+  stroke: #ffffff;
   stroke-width: 2;
+  cursor: pointer;
   transition: r var(--transition-fast);
 }
 
 .chart-dot:hover,
 .chart-dot:focus {
   r: 7;
+}
+
+/* Contorno do ponto como indicador de foco (outline em SVG é irregular). */
+.chart-dot:focus {
   outline: none;
 }
 
-.chart-dot-acumulado {
-  fill: var(--bg-card);
-  stroke: var(--chart-acum);
-}
-
-.chart-dot-periodo {
-  fill: var(--bg-card);
-  stroke: var(--chart-periodo);
+.chart-dot:focus-visible {
+  stroke: var(--focus-ring);
+  stroke-width: 3;
 }
 
 .chart-tooltip {
   position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 20;
   max-width: 320px;
   max-height: 260px;
   overflow-y: auto;
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-xs) var(--spacing-sm);
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-sm);
   font-family: var(--font-body);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--text-primary);
   pointer-events: none;
+}
+
+[data-theme="dark"] .chart-tooltip {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
 }
 
 .chart-tooltip-title {
@@ -863,11 +915,11 @@ tbody tr:hover {
 .chart-legenda {
   display: flex;
   justify-content: center;
-  gap: 1.5rem;
-  margin-top: 1rem;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-sm);
   font-family: var(--font-body);
   font-size: 0.85rem;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .chart-legenda-item {
@@ -878,19 +930,20 @@ tbody tr:hover {
 
 .chart-swatch {
   display: inline-block;
-  width: 24px;
-  height: 3px;
+  width: 16px;
+  height: 0;
+  border-top: 3px solid;
   border-radius: 2px;
 }
 
 .chart-swatch-acumulado {
-  background-color: var(--chart-acum);
+  border-top-style: solid;
+  border-color: var(--cor-ic1, #344563);
 }
 
 .chart-swatch-periodo {
-  height: 0;
-  background: none;
-  border-top: 3px dashed var(--chart-periodo);
+  border-top-style: dashed;
+  border-color: var(--chart-periodo);
 }
 
 .metric-card .metric-value {
@@ -902,20 +955,6 @@ tbody tr:hover {
 }
 
 /* ----- Eixos temáticos (accordion) ----- */
-.eixos-grid {
-  display: grid !important;
-  grid-template-columns: repeat(2, 1fr) !important;
-  gap: 1.5rem;
-  align-items: start;
-  width: 100%;
-}
-
-@media (max-width: 900px) {
-  .eixos-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
-
 .eixo-card {
   padding: 0;
   overflow: hidden;
@@ -1008,6 +1047,7 @@ tbody tr:hover {
 /* ----- Inputs ----- */
 input[type="text"],
 input[type="number"],
+input[type="search"],
 input[type="file"],
 select {
   padding: var(--spacing-sm) var(--spacing-md);
@@ -1022,14 +1062,15 @@ select {
 
 input[type="text"]:focus,
 input[type="number"]:focus,
+input[type="search"]:focus,
 select:focus {
-  outline: none;
   border-color: var(--cor-ic1);
   box-shadow: 0 0 0 3px rgba(52, 69, 99, 0.2);
 }
 
 [data-theme="dark"] input[type="text"]:focus,
 [data-theme="dark"] input[type="number"]:focus,
+[data-theme="dark"] input[type="search"]:focus,
 [data-theme="dark"] select:focus {
   box-shadow: 0 0 0 3px rgba(102, 125, 166, 0.25);
 }
@@ -1053,7 +1094,6 @@ select:focus {
 }
 
 .periodo-card {
-  padding: 0;
   overflow: hidden;
 }
 
@@ -1243,8 +1283,8 @@ table .btn {
   margin: 0;
 }
 
-.footer-links {
-  margin-top: var(--spacing-sm) !important;
+.app-footer .footer-links {
+  margin-top: var(--spacing-sm);
 }
 
 .footer-links a {
@@ -1576,14 +1616,14 @@ table .btn {
 
 .excecao-form input,
 .excecao-form select {
-  height: 42px !important;
-  min-height: 42px !important;
+  height: 42px;
+  min-height: 42px;
   padding: 8px 12px;
 }
 
 .excecao-form textarea,
 .mesa-col textarea {
-  min-height: 120px !important;
+  min-height: 120px;
   resize: vertical;
 }
 
@@ -2016,7 +2056,6 @@ table .btn {
   border-color: var(--cor-ic1, #344563);
   box-shadow: var(--shadow-md);
   transform: translateY(-1px);
-  outline: none;
 }
 
 [data-theme="dark"] .metric-card.metric-clicavel:hover,
@@ -2056,24 +2095,6 @@ table .btn {
 /* ============================================================
    Reestruturação: navegação, uploads duplos, espaçamento e contraste
    ============================================================ */
-
-/* Aumenta o respiro geral */
-.app-main {
-  padding: var(--spacing-xl) var(--spacing-xl);
-}
-
-.card {
-  padding: var(--spacing-xl);
-  margin-bottom: var(--spacing-xl);
-}
-
-h1, h2, h3, h4, h5, h6 {
-  margin: 0 0 var(--spacing-lg);
-}
-
-p {
-  margin: 0 0 var(--spacing-lg);
-}
 
 /* Header com navegação interna */
 .header-nav {
@@ -2163,10 +2184,6 @@ p {
 }
 
 /* Fila de triagem */
-.fila-toolbar {
-  margin-bottom: var(--spacing-xl);
-}
-
 .input-busca {
   width: 100%;
   max-width: 420px;
@@ -2177,27 +2194,9 @@ p {
   max-width: 160px;
 }
 
-.triage-table {
-  width: 100%;
-}
-
-.triage-table th,
-.triage-table td {
-  padding: var(--spacing-md) var(--spacing-md);
-  border-bottom: 1px solid var(--divider-color);
-}
-
-.triage-table tbody tr.triage-ok {
-  background-color: rgba(22, 163, 74, 0.08);
-}
-
-.triage-table tbody tr.triage-ok:hover {
-  background-color: rgba(22, 163, 74, 0.14);
-}
-
 .triage-table .doc-link {
   font-weight: 600;
-  color: var(--cor-ic1);
+  color: var(--accent-text);
 }
 
 /* Paginação */
@@ -2308,10 +2307,6 @@ p {
   padding: var(--spacing-xl);
 }
 
-.metric-value {
-  font-size: 1.75rem;
-}
-
 /* Tabelas e formulários com mais contraste */
 table {
   border: 1px solid var(--border-color);
@@ -2328,109 +2323,6 @@ th {
 #admin-metricas .cards-grid {
   margin-bottom: var(--spacing-xl);
 }
-
-/* Gráfico SVG de evolução do CR */
-.chart-wrap {
-  position: relative;
-  width: 100%;
-  overflow-x: auto;
-}
-
-.chart-svg {
-  width: 100%;
-  min-width: 600px;
-  height: auto;
-  display: block;
-}
-
-.chart-grid-line {
-  stroke: var(--border-color);
-  stroke-width: 1;
-}
-
-.chart-ref-line {
-  stroke: #f59e0b;
-  stroke-width: 2;
-  stroke-dasharray: 4 2;
-}
-
-.chart-label,
-.chart-label-x {
-  fill: var(--text-muted);
-  font-size: 12px;
-}
-
-.chart-line-acumulado {
-  stroke: var(--cor-ic1, #344563);
-  stroke-width: 3;
-}
-
-.chart-line-periodo {
-  stroke: #7c3aed;
-  stroke-width: 2;
-  stroke-dasharray: 5 5;
-}
-
-.chart-dot {
-  fill: var(--cor-ic1, #344563);
-  stroke: #ffffff;
-  stroke-width: 2;
-  cursor: pointer;
-}
-
-.chart-dot:hover {
-  r: 7;
-}
-
-.chart-legenda {
-  display: flex;
-  gap: var(--spacing-md);
-  margin-top: var(--spacing-sm);
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.chart-legenda-item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.chart-swatch {
-  display: inline-block;
-  width: 16px;
-  height: 0;
-  border-top: 3px solid;
-  border-radius: 2px;
-}
-
-.chart-swatch-acumulado {
-  border-top-style: solid;
-  border-color: var(--cor-ic1, #344563);
-}
-
-.chart-swatch-periodo {
-  border-top-style: dashed;
-  border-color: #7c3aed;
-}
-
-.chart-tooltip {
-  position: absolute;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: 0.85rem;
-  pointer-events: none;
-  box-shadow: var(--shadow-sm);
-}
-
-[data-theme="dark"] .chart-line-acumulado { stroke: #60a5fa; }
-[data-theme="dark"] .chart-dot { fill: #60a5fa; }
-[data-theme="dark"] .chart-tooltip { background: #1e293b; border-color: #334155; color: #f1f5f9; }
 
 /* Filtro de status na fila */
 .fila-toolbar {
@@ -2503,14 +2395,14 @@ th {
   background: none;
   border: none;
   padding: 0;
-  color: var(--cor-ic1);
+  color: var(--accent-text);
   font-weight: 600;
   text-decoration: underline;
   cursor: pointer;
 }
 
 .btn-text:hover {
-  color: var(--cor-ic1-light);
+  color: var(--accent-text-hover);
 }
 
 /* Modal institucional */
@@ -2552,6 +2444,17 @@ th {
 
 .modal-header h2 {
   margin: 0;
+}
+
+/* .btn-icon nasce para o header escuro (texto claro); dentro do modal o
+   fundo é o do card, então o ícone usa a cor de texto do tema. */
+.modal-header .btn-icon {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.modal-header .btn-icon:hover {
+  background-color: var(--bg-hover);
 }
 
 .modal-body {
@@ -2673,17 +2576,17 @@ th {
 
 /* Linha 100% apta: aprovação imediata com selo verde */
 .triage-table tr.triage-ok {
-  background-color: var(--status-ap-bg);
+  background-color: rgba(22, 163, 74, 0.08);
   box-shadow: inset 4px 0 0 var(--status-ap);
-}
-
-.triage-table tr.triage-ok:hover {
-  background-color: var(--status-ap-bg);
-  filter: brightness(0.97);
 }
 
 [data-theme="dark"] .triage-table tr.triage-ok {
   background-color: rgb(22 163 74 / 0.15);
+}
+
+.triage-table tr.triage-ok:hover {
+  background-color: rgba(22, 163, 74, 0.14);
+  filter: brightness(0.97);
 }
 
 .triage-table .actions-row {
@@ -2745,5 +2648,72 @@ th {
 @media (prefers-reduced-motion: reduce) {
   .spinner {
     animation: none;
+  }
+}
+
+/* Tabelas da Fila e de Autorizados em telas estreitas: cada linha vira um
+   cartão com rótulo por campo (data-label preenchido por tabelaResponsiva). */
+@media (max-width: 640px) {
+  .triage-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .triage-table,
+  .triage-table tbody,
+  .triage-table tr,
+  .triage-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .triage-table tr {
+    padding: var(--spacing-sm) 0;
+    border-bottom: 1px solid var(--divider-color);
+  }
+
+  .triage-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .triage-table td {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-bottom: none;
+  }
+
+  .triage-table td[data-label] {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 35%) 1fr;
+    gap: var(--spacing-xs) var(--spacing-sm);
+    align-items: start;
+  }
+
+  /* Vários filhos (ex.: badges de status, nome + data de envio) empilham
+     na coluna de conteúdo em vez de invadir a coluna do rótulo. */
+  .triage-table td[data-label] > * {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .triage-table td[data-label] > br {
+    display: none;
+  }
+
+  .triage-table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .triage-table .actions-row {
+    flex-wrap: wrap;
+    white-space: normal;
   }
 }

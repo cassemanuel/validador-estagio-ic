@@ -8,7 +8,7 @@
  */
 
 import { api } from '../api/client.js';
-import { el, clearElement, formatNumberBR } from '../ui/dom.js';
+import { el, clearElement, formatNumberBR, tabelaResponsiva } from '../ui/dom.js';
 import { dialogConfirmar, dialogAviso } from '../ui/dialog.js';
 import { navegarPara } from '../router.js';
 import { abrirMesa } from './mesa.js';
@@ -53,9 +53,25 @@ const fmtDataHora = (iso) =>
 // importam daqui (ex.: mesa.js).
 export { dialogConfirmar, dialogAviso };
 
-/** Estado de carregamento acessível (anunciado por leitores de tela). */
+/**
+ * Região aria-live persistente (só para leitores de tela) logo antes do
+ * container de resultados. Fica no DOM desde a primeira carga — regiões
+ * criadas junto com o texto costumam não ser anunciadas — e recebe frases
+ * curtas, em vez de a tabela inteira ser relida a cada busca.
+ */
+function anunciar(container, texto) {
+  const id = `${container.id}-status`;
+  let regiao = document.getElementById(id);
+  if (!regiao) {
+    regiao = el('p', { id, className: 'sr-only', role: 'status', 'aria-live': 'polite' });
+    container.before(regiao);
+  }
+  regiao.textContent = texto;
+}
+
+/** Estado de carregamento visual (o anúncio é feito por `anunciar`). */
 function estadoCarregando(texto) {
-  return el('div', { className: 'card estado-carregando', role: 'status' }, [
+  return el('div', { className: 'card estado-carregando' }, [
     el('span', { className: 'spinner', 'aria-hidden': 'true' }),
     el('span', {}, texto),
   ]);
@@ -371,6 +387,7 @@ export async function carregarFila() {
   clearElement(container);
   container.setAttribute('aria-busy', 'true');
   container.appendChild(estadoCarregando('Carregando processos…'));
+  anunciar(container, 'Carregando processos…');
 
   const query = new URLSearchParams({
     tipo: filaParams.tipo,
@@ -402,12 +419,14 @@ export async function carregarFila() {
     container.appendChild(el('div', { className: 'card' }, [
       el('p', { className: 'text-muted' }, 'Nenhum processo encontrado.'),
     ]));
+    anunciar(container, 'Nenhum processo encontrado.');
     return;
   }
 
+  anunciar(container, `${resp.total} processo(s) encontrado(s).`);
   container.appendChild(
     el('div', { className: 'card table-container' }, [
-      el('table', { className: 'triage-table' }, [
+      tabelaResponsiva(el('table', { className: 'triage-table' }, [
         el('thead', {}, [
           el('tr', {}, [
             el('th', { scope: 'col' }, 'Nome'),
@@ -420,7 +439,7 @@ export async function carregarFila() {
           ]),
         ]),
         el('tbody', {}, resp.submissoes.map((s) => renderLinha(s))),
-      ]),
+      ])),
     ])
   );
 
@@ -559,7 +578,8 @@ async function carregarAutorizacoes() {
     if (input) {
       const texto = papelAtual === 'comissao' ? 'Buscar por DRE ou nome' : 'Buscar por nome';
       input.placeholder = texto;
-      input.setAttribute('aria-label', texto);
+      input.setAttribute('aria-label',
+        `${texto} — autorizações ${status === 'vigentes' ? 'válidas' : 'expiradas'}`);
     }
   });
   await Promise.all([
@@ -692,6 +712,7 @@ async function carregarAutorizacoesLista(status, append = false) {
     clearElement(container);
     container.appendChild(estadoCarregando('Carregando autorizações…'));
   }
+  anunciar(container, 'Carregando autorizações…');
   if (btnMais) btnMais.disabled = true;
 
   let resp;
@@ -737,6 +758,12 @@ async function carregarAutorizacoesLista(status, append = false) {
       tbody.appendChild(renderLinhaAutorizacao(a, status === 'vigentes' && ehComissao))
     );
   }
+
+  tabelaResponsiva(tbody.closest('table'));
+  const rotuloLista = status === 'vigentes' ? 'válida(s)' : 'expirada(s)';
+  anunciar(container, resp.total
+    ? `${Math.min(params.offset + lista.length, resp.total)} de ${resp.total} autorização(ões) ${rotuloLista} exibida(s).`
+    : `Nenhuma autorização ${status === 'vigentes' ? 'válida' : 'expirada'} encontrada.`);
 
   params.offset += lista.length;
   if (btnMais) {

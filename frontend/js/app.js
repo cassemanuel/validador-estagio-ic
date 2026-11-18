@@ -134,12 +134,10 @@ function mostrarLogin() {
   const headerNav = document.getElementById('header-nav');
   if (headerNav) {
     headerNav.hidden = true;
-    headerNav.style.display = 'none';
   }
   const publicNav = document.getElementById('header-nav-public');
   if (publicNav) {
     publicNav.hidden = true;
-    publicNav.style.display = 'none';
   }
   history.replaceState({ view: 'login' }, '', '/login');
 }
@@ -154,13 +152,11 @@ async function mostrarApp(user, pushState = true) {
   if (headerNav) {
     const visivel = user.papel === 'comissao';
     headerNav.hidden = !visivel;
-    headerNav.style.display = visivel ? 'flex' : 'none';
   }
 
   const publicNav = document.getElementById('header-nav-public');
   if (publicNav) {
     publicNav.hidden = false;
-    publicNav.style.display = 'flex';
   }
 
   const homeLink = document.getElementById('header-home-link');
