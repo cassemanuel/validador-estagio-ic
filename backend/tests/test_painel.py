@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from .conftest import login, payload_apto, submeter
+from .conftest import DRE_ALUNO1, DRE_ALUNO2, login, payload_apto, submeter
 
 
 def test_reenvio_apos_devolucao(client):
@@ -28,7 +28,7 @@ def test_metricas(client):
     submeter(client)
     login(client, "aluno2", "aluno123")
     payload = payload_apto(
-        metadata={"dre": "aluno2", "tipoDocumento": "boa"},
+        metadata={"nome": "Discente Dois", "dre": DRE_ALUNO2, "tipoDocumento": "boa"},
         excecoes=[
             {
                 "codigo_requisito": "MAD243",
@@ -303,7 +303,7 @@ def test_autorizacoes_paginacao_e_busca(client):
     login(client, "aluno2", "aluno123")
     p2 = payload_apto()
     p2["metadata"]["nome"] = "Segundo Aluno"
-    p2["metadata"]["dre"] = "aluno2"
+    p2["metadata"]["dre"] = DRE_ALUNO2
     sub2 = submeter(client, payload=p2).json()
 
     login(client, "comissao1", "comissao123")
@@ -333,9 +333,9 @@ def test_autorizacoes_paginacao_e_busca(client):
     expiradas = client.get("/api/comissao/autorizacoes?status=expirada").json()
     assert expiradas["autorizacoes"] == []
 
-    busca = client.get("/api/comissao/autorizacoes?q=aluno1").json()
+    busca = client.get(f"/api/comissao/autorizacoes?q={DRE_ALUNO1}").json()
     assert len(busca["autorizacoes"]) == 1
-    assert busca["autorizacoes"][0]["dre"] == "aluno1"
+    assert busca["autorizacoes"][0]["dre"] == DRE_ALUNO1
 
     vazia = client.get("/api/comissao/autorizacoes?q=naoexiste").json()
     assert vazia["autorizacoes"] == []

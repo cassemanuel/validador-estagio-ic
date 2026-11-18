@@ -9,11 +9,17 @@
 
 import { api } from '../api/client.js';
 import { el, clearElement, formatNumberBR } from '../ui/dom.js';
+import { dialogConfirmar, dialogAviso } from '../ui/dialog.js';
 import { navegarPara } from '../router.js';
 import { abrirMesa } from './mesa.js';
 
 let filaParams = { tipo: 'todos', status: 'todos', q: '', offset: 0, limite: 25 };
-let filaCarregando = false;
+// Versão da requisição corrente: respostas de requisições antigas (ex.:
+// busca digitada durante um carregamento) são descartadas, sem perder a
+// última intenção do usuário.
+let filaReqId = 0;
+const autorizacoesReqId = { vigentes: 0, expiradas: 0 };
+let papelAtual = null;
 let dashboardAno = '';
 
 const autorizacoesParams = {
@@ -32,6 +38,9 @@ const ACAO_LABEL = {
   arquivamento: 'Arquivamento de logs',
   processo_arquivado: 'Processo arquivado',
   processo_desarquivado: 'Processo desarquivado',
+  submissao_cancelada: 'Submissão cancelada',
+  revogacao_autorizacao: 'Autorização revogada',
+  papel_alterado: 'Papel do usuário alterado',
 };
 
 const fmtData = (iso) =>
@@ -40,61 +49,27 @@ const fmtData = (iso) =>
 const fmtDataHora = (iso) =>
   iso ? new Date(iso).toLocaleString('pt-BR') : '—';
 
-/**
- * Modal de confirmação estilizado (substitui window.prompt/confirm/alert).
- * @param {object} op
- * @param {string} op.titulo Título do dialog.
- * @param {string} [op.mensagem] Texto explicativo.
- * @param {boolean} [op.comMotivo] Se true, exibe textarea de justificativa
- *   e retorna o texto digitado; se false, retorna true/false.
- * @param {string} [op.labelOk] Rótulo do botão de confirmação.
- * @returns {Promise<string|boolean|null>} Texto do motivo, true (confirmado)
- *   sem motivo, ou null (cancelado).
- */
-export function dialogConfirmar({ titulo, mensagem, comMotivo = true, labelOk = 'Confirmar' }) {
-  const modal = document.getElementById('modal-confirmar');
-  const h2 = document.getElementById('modal-confirmar-titulo');
-  const msg = document.getElementById('modal-confirmar-msg');
-  const motivo = document.getElementById('modal-confirmar-motivo');
-  const btnOk = document.getElementById('modal-confirmar-ok');
-  const btnCancel = document.getElementById('modal-confirmar-cancel');
-  const btnFechar = document.getElementById('modal-confirmar-fechar');
-  if (!modal) return Promise.resolve(null);
+// Modais movidos para ui/dialog.js; re-exportados para os módulos que
+// importam daqui (ex.: mesa.js).
+export { dialogConfirmar, dialogAviso };
 
-  h2.textContent = titulo;
-  msg.textContent = mensagem || '';
-  msg.hidden = !mensagem;
-  motivo.hidden = !comMotivo;
-  motivo.value = '';
-  motivo.classList.remove('input-erro');
-  motivo.oninput = () => motivo.classList.remove('input-erro');
-  btnOk.textContent = labelOk;
-
-  return new Promise((resolve) => {
-    const fechar = (valor) => {
-      modal.close();
-      resolve(valor);
-    };
-    btnOk.onclick = () => {
-      const texto = motivo.value.trim();
-      if (comMotivo && !texto) {
-        motivo.focus();
-        motivo.classList.add('input-erro');
-        return;
-      }
-      fechar(comMotivo ? texto : true);
-    };
-    btnCancel.onclick = () => fechar(null);
-    btnFechar.onclick = () => fechar(null);
-    modal.onclick = (e) => { if (e.target === modal) fechar(null); };
-    modal.showModal();
-    if (comMotivo) motivo.focus();
-  });
+/** Estado de carregamento acessível (anunciado por leitores de tela). */
+function estadoCarregando(texto) {
+  return el('div', { className: 'card estado-carregando', role: 'status' }, [
+    el('span', { className: 'spinner', 'aria-hidden': 'true' }),
+    el('span', {}, texto),
+  ]);
 }
 
-/** Modal de aviso (substitui window.alert). */
-export function dialogAviso(titulo, mensagem) {
-  return dialogConfirmar({ titulo, mensagem, comMotivo: false, labelOk: 'Entendi' });
+/** Estado de erro com ação de nova tentativa. */
+function estadoErro(mensagem, tentarNovamente) {
+  const btn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' },
+    'Tentar novamente');
+  btn.addEventListener('click', tentarNovamente);
+  return el('div', { className: 'card card-aviso estado-erro', role: 'alert' }, [
+    el('p', {}, mensagem),
+    btn,
+  ]);
 }
 
 export function initPainel(viewAtual = 'view-admin-dashboard') {
@@ -383,17 +358,19 @@ function initBuscaFila() {
 }
 
 export async function carregarFila() {
-  if (filaCarregando) return;
-  filaCarregando = true;
+  const reqId = ++filaReqId;
 
   const container = document.getElementById('admin-fila');
   const paginacao = document.getElementById('admin-paginacao');
-  clearElement(container);
   clearElement(paginacao);
   atualizarTabsFila(filaParams.tipo);
 
   const statusSelect = document.getElementById('fila-status');
   if (statusSelect) statusSelect.value = filaParams.status;
+
+  clearElement(container);
+  container.setAttribute('aria-busy', 'true');
+  container.appendChild(estadoCarregando('Carregando processos…'));
 
   const query = new URLSearchParams({
     tipo: filaParams.tipo,
@@ -407,18 +384,24 @@ export async function carregarFila() {
   try {
     resp = await api(`/api/comissao/fila?${query.toString()}`);
   } catch (err) {
-    container.appendChild(el('div', { className: 'card' }, [
-      el('p', { className: 'text-muted' }, err.message || 'Erro ao carregar fila.'),
-    ]));
-    filaCarregando = false;
+    if (reqId !== filaReqId) return; // resposta obsoleta
+    clearElement(container);
+    container.removeAttribute('aria-busy');
+    container.appendChild(
+      estadoErro(err.message || 'Erro ao carregar a fila.', () => carregarFila())
+    );
     return;
   }
+  // Uma busca/filtro mais recente já está em andamento: descarta esta.
+  if (reqId !== filaReqId) return;
+
+  clearElement(container);
+  container.removeAttribute('aria-busy');
 
   if (!resp.submissoes.length) {
     container.appendChild(el('div', { className: 'card' }, [
       el('p', { className: 'text-muted' }, 'Nenhum processo encontrado.'),
     ]));
-    filaCarregando = false;
     return;
   }
 
@@ -442,7 +425,6 @@ export async function carregarFila() {
   );
 
   renderPaginacao(resp.total, paginacao);
-  filaCarregando = false;
 }
 
 function renderLinha(sub) {
@@ -566,6 +548,20 @@ function renderPaginacao(total, container) {
    ============================================================ */
 
 async function carregarAutorizacoes() {
+  try {
+    papelAtual = (await api('/api/auth/me'))?.papel || null;
+  } catch {
+    papelAtual = null;
+  }
+  // O portal público (discentes) busca só por nome; a comissão também por DRE.
+  ['vigentes', 'expiradas'].forEach((status) => {
+    const input = document.getElementById(`autorizacoes-q-${status}`);
+    if (input) {
+      const texto = papelAtual === 'comissao' ? 'Buscar por DRE ou nome' : 'Buscar por nome';
+      input.placeholder = texto;
+      input.setAttribute('aria-label', texto);
+    }
+  });
   await Promise.all([
     carregarMetricasAutorizacoes(),
     carregarAutorizacoesLista('vigentes', false),
@@ -581,7 +577,10 @@ async function carregarMetricasAutorizacoes() {
   let m;
   try {
     m = await api('/api/autorizacoes/metricas');
-  } catch {
+  } catch (err) {
+    container.appendChild(
+      estadoErro(err.message || 'Erro ao carregar as métricas.', () => carregarMetricasAutorizacoes())
+    );
     return;
   }
 
@@ -645,6 +644,7 @@ function renderLinhaAutorizacao(a, podeRevogar) {
         mensagem: `Informe o motivo da revogação da autorização de ${a.nome || '—'}.`,
       });
       if (!motivo) return;
+      btnRevogar.disabled = true;
       try {
         await api(`/api/comissao/submissoes/${a.id}/revogar`, {
           method: 'POST',
@@ -652,6 +652,7 @@ function renderLinhaAutorizacao(a, podeRevogar) {
         });
         await carregarAutorizacoes();
       } catch (err) {
+        btnRevogar.disabled = false;
         await dialogAviso('Falha na revogação', err.message);
       }
     });
@@ -666,59 +667,80 @@ function renderLinhaAutorizacao(a, podeRevogar) {
 }
 
 async function carregarAutorizacoesLista(status, append = false) {
+  const reqId = ++autorizacoesReqId[status];
   const apiStatus = status === 'vigentes' ? 'vigente' : 'expirada';
   const params = autorizacoesParams[status];
   const container = document.getElementById(`autorizacoes-lista-${status}`);
   const btnMais = document.getElementById(`autorizacoes-mais-${status}`);
   if (!container) return;
 
-  let podeRevogar = false;
-  try {
-    const user = await api('/api/auth/me');
-    podeRevogar = user?.papel === 'comissao';
-  } catch {
-    podeRevogar = false;
-  }
+  const ehComissao = papelAtual === 'comissao';
+  if (!append) params.offset = 0;
 
+  // Comissão vê o DRE completo; o portal público recebe o DRE mascarado.
+  const base = ehComissao ? '/api/comissao/autorizacoes' : '/api/autorizacoes';
+  const query = new URLSearchParams({
+    status: apiStatus,
+    offset: String(params.offset),
+    limite: String(params.limite),
+  });
+  if (params.q) query.set('q', params.q);
+
+  container.setAttribute('aria-busy', 'true');
+  container.querySelector('.estado-erro')?.remove();
   if (!append) {
-    params.offset = 0;
+    clearElement(container);
+    container.appendChild(estadoCarregando('Carregando autorizações…'));
+  }
+  if (btnMais) btnMais.disabled = true;
+
+  let resp;
+  try {
+    resp = await api(`${base}?${query.toString()}`);
+  } catch (err) {
+    if (reqId !== autorizacoesReqId[status]) return; // resposta obsoleta
+    container.removeAttribute('aria-busy');
+    container.querySelector('.estado-carregando')?.remove();
+    container.appendChild(
+      estadoErro(err.message || 'Erro ao carregar autorizações.',
+        () => carregarAutorizacoesLista(status, append))
+    );
+    if (btnMais) btnMais.disabled = false;
+    return;
+  }
+  // Uma busca mais recente já está em andamento: descarta esta resposta.
+  if (reqId !== autorizacoesReqId[status]) return;
+
+  container.removeAttribute('aria-busy');
+  container.querySelector('.estado-carregando')?.remove();
+  const lista = resp.autorizacoes || [];
+
+  let tbody = append ? container.querySelector('tbody') : null;
+  if (!tbody) {
+    clearElement(container);
+    const table = el('table', { className: 'triage-table' }, [
+      renderCabecalhoAutorizacoes(),
+      el('tbody', {}),
+    ]);
+    container.appendChild(el('div', { className: 'card table-container' }, [table]));
+    tbody = table.querySelector('tbody');
   }
 
-  const url = `/api/autorizacoes?status=${apiStatus}&offset=${params.offset}&limite=${params.limite}${params.q ? `&q=${encodeURIComponent(params.q)}` : ''}`;
+  if (!lista.length && !append) {
+    tbody.appendChild(
+      el('tr', {}, [
+        el('td', { colspan: '5', className: 'text-muted' }, 'Nenhuma autorização encontrada.'),
+      ])
+    );
+  } else {
+    lista.forEach((a) =>
+      tbody.appendChild(renderLinhaAutorizacao(a, status === 'vigentes' && ehComissao))
+    );
+  }
 
-  try {
-    const resp = await api(url);
-    const lista = resp.autorizacoes || [];
-    let tbody = container.querySelector('tbody');
-
-    if (!tbody) {
-      const table = el('table', { className: 'triage-table' }, [
-        renderCabecalhoAutorizacoes(),
-        el('tbody', {}),
-      ]);
-      container.appendChild(el('div', { className: 'card table-container' }, [table]));
-      tbody = table.querySelector('tbody');
-    } else if (!append) {
-      clearElement(tbody);
-    }
-
-    if (!lista.length && !append) {
-      tbody.appendChild(
-        el('tr', {}, [
-          el('td', { colspan: '5', className: 'text-muted' }, 'Nenhuma autorização encontrada.'),
-        ])
-      );
-    } else {
-      lista.forEach((a) =>
-        tbody.appendChild(renderLinhaAutorizacao(a, status === 'vigentes' && podeRevogar))
-      );
-    }
-
-    params.offset += lista.length;
-    if (btnMais) {
-      btnMais.hidden = resp.total <= params.offset || lista.length === 0;
-    }
-  } catch {
-    // silencia: a view permanece no estado anterior
+  params.offset += lista.length;
+  if (btnMais) {
+    btnMais.disabled = false;
+    btnMais.hidden = resp.total <= params.offset || lista.length === 0;
   }
 }

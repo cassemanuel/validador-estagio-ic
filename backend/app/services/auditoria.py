@@ -9,6 +9,7 @@ import json
 
 from sqlalchemy.orm import Session
 
+from ..db import travar_escrita
 from ..models import AuditLog, Usuario
 
 GENESIS = "GENESIS"
@@ -22,8 +23,17 @@ def registrar(
     entidade_id: int | None = None,
     payload: dict | None = None,
 ) -> AuditLog:
-    """Insere um registro no audit_log dentro da transação corrente."""
-    ultimo = db.query(AuditLog).order_by(AuditLog.id.desc()).first()
+    """Insere um registro no audit_log dentro da transação corrente.
+
+    Antes de ler o último hash, a transação adquire o lock de escrita do
+    banco (ver `db.travar_escrita`): duas requisições simultâneas nunca leem o
+    mesmo `hash_anterior`, então a cadeia não bifurca. O lock é liberado
+    no commit/rollback do chamador.
+    """
+    travar_escrita(db)
+    ultimo = (
+        db.query(AuditLog).order_by(AuditLog.id.desc()).with_for_update().first()
+    )
     hash_anterior = ultimo.hash_registro if ultimo else GENESIS
 
     payload_json = json.dumps(payload, ensure_ascii=False) if payload else None

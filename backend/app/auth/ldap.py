@@ -7,6 +7,7 @@ O papel 'comissao' deriva de membership no grupo LDAP_GROUP_COMISSAO
 """
 
 import ldap3
+from ldap3.utils.conv import escape_filter_chars
 
 from .provider import AuthProvider, UserInfo
 
@@ -26,7 +27,11 @@ class LdapAuthProvider(AuthProvider):
         if not username or not password:
             return None
 
-        filtro = self.settings.ldap_user_filter.format(username=username)
+        # Escapa metacaracteres do filtro (*, (, ), \, NUL) — impede injeção
+        # e wildcards no username digitado.
+        filtro = self.settings.ldap_user_filter.format(
+            username=escape_filter_chars(username)
+        )
 
         try:
             # Bind de serviço (opcional) para pesquisar o DN do usuário.
@@ -61,7 +66,7 @@ class LdapAuthProvider(AuthProvider):
 
     def _is_comissao(self, conn, user_dn: str, username: str) -> bool:
         if self.settings.ldap_group_comissao:
-            filtro = f"(member={user_dn})"
+            filtro = f"(member={escape_filter_chars(user_dn)})"
             if conn.search(
                 self.settings.ldap_group_comissao, filtro, attributes=["cn"]
             ):

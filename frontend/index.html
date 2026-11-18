@@ -106,38 +106,12 @@
           <p id="login-erro" class="login-erro" role="alert" hidden></p>
           <button type="submit" class="btn btn-primary">Entrar</button>
         </form>
+        <!-- Atalhos de login seed: preenchidos por app.js somente quando
+             /api/auth/info indica dev + auth local. Nenhuma credencial fica
+             no HTML servido. -->
         <div id="login-dev" class="login-dev" hidden>
           <p class="text-muted">Acesso rápido (desenvolvimento):</p>
-          <div class="actions-row">
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              data-dev-login="aluno1"
-              data-dev-senha="aluno123"
-            >Aluno 1</button>
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              data-dev-login="aluno2"
-              data-dev-senha="aluno123"
-            >Aluno 2</button>
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              data-dev-login="aluno3"
-              data-dev-senha="aluno123"
-            >Aluno 3</button>
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              data-dev-login="comissao1"
-              data-dev-senha="comissao123"
-            >Comissão</button>
-          </div>
-          <p class="text-muted login-dev-hint">
-            Credenciais de dev: <code>aluno1</code>–<code>aluno3 / aluno123</code>
-            (discente) · <code>comissao1 / comissao123</code> (comissão)
-          </p>
+          <div id="login-dev-botoes" class="actions-row"></div>
         </div>
       </div>
     </section>

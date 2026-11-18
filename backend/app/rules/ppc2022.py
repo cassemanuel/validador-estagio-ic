@@ -5,12 +5,14 @@ para o sanity check das submissões — evita divergência JS↔Python.
 """
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 
 SITUACOES_COM_GRAU = {"AP", "RM", "RF", "RFM"}
 SITUACOES_SEM_GRAU = {"NCG", "NCC", "T", "CURSANDO"}
 GRAUS_TEXTUAIS_SEM_GRAU = {"T", "NCG", "NCC", "*****"}
+PERIODO_LETIVO_REGEX = re.compile(r"^\d{4}/\d$")
 
 
 @lru_cache(maxsize=1)
@@ -104,8 +106,14 @@ def verificar_elegibilidade(historico: dict, regras: dict) -> dict:
     extensao_a_partir = regras.get("extensao_ingresso_a_partir", "2025/1")
 
     cr_r, pontos, cr = cr_acumulado(_todas_disciplinas(historico))
+    # Só períodos letivos reais (AAAA/S) contam para o tempo de curso —
+    # agrupamentos sintéticos como "Aprovadas (BOA)" ficam de fora.
     periodos_cursados = len(
-        {str(p.get("periodo") or "").strip() for p in periodos if p.get("periodo")}
+        {
+            rotulo
+            for p in periodos
+            if PERIODO_LETIVO_REGEX.match(rotulo := str(p.get("periodo") or "").strip())
+        }
     )
 
     metadata = historico.get("metadata") or {}

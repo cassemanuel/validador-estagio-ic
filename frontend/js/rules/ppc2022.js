@@ -19,6 +19,8 @@ import { disciplinaConcluida } from '../domain/cr.js';
 
 export const RULES_URL = '/rules/ciclo_basico.json';
 
+const PERIODO_LETIVO_REGEX = /^\d{4}\/\d$/;
+
 let _regrasCache = null;
 
 /**
@@ -110,8 +112,12 @@ export function verificarElegibilidadeEstagio(historyData, regras) {
   const extensaoAPartir = regras?.extensao_ingresso_a_partir ?? '2025/1';
 
   const crAcumulado = historyData?.resumo?.crCalculado ?? 0;
+  // Só períodos letivos reais (AAAA/S) contam para o tempo de curso —
+  // agrupamentos sintéticos como "Aprovadas (BOA)" ficam de fora.
   const periodosCursados = new Set(
-    periodos.map((p) => String(p.periodo || '').trim()).filter(Boolean)
+    periodos
+      .map((p) => String(p.periodo || '').trim())
+      .filter((rotulo) => PERIODO_LETIVO_REGEX.test(rotulo))
   ).size;
   const ingresso = historyData?.metadata?.ingresso || null;
   const extensao = historyData?.resumoBoa?.extensao || {};

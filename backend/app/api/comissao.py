@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..auth.jwt import require_comissao
 from ..config import settings
-from ..db import get_db
+from ..db import get_db, travar_escrita
 from ..models import (
     STATUS_SUBMISSAO,
     AuditLog,
@@ -83,7 +83,12 @@ def _serializar_completo(sub: Submissao) -> dict:
     return dados
 
 
-def _obter_submissao(db: Session, sub_id: int) -> Submissao:
+def _obter_submissao(db: Session, sub_id: int, para_escrita: bool = False) -> Submissao:
+    """Carrega a submissão; com `para_escrita`, antes adquire o lock de escrita
+    para que a checagem de status e a transição sejam atômicas (evita duas
+    deliberações simultâneas sobre o mesmo processo)."""
+    if para_escrita:
+        travar_escrita(db)
     sub = db.query(Submissao).filter_by(id=sub_id).first()
     if not sub:
         raise HTTPException(404, "Submissão não encontrada.")
@@ -185,6 +190,16 @@ def auditoria(
     }
 
 
+def mascarar_dre(dre) -> str | None:
+    """Exibe só os 3 primeiros e 2 últimos dígitos (ex.: 120****12)."""
+    if not dre:
+        return None
+    dre = str(dre)
+    if len(dre) <= 5:
+        return "*" * len(dre)
+    return dre[:3] + "*" * (len(dre) - 5) + dre[-2:]
+
+
 def _listar_autorizacoes(
     db: Session,
     ano: int | None,
@@ -192,8 +207,13 @@ def _listar_autorizacoes(
     offset: int,
     limite: int,
     q: str | None,
+    publico: bool = False,
 ) -> dict:
-    """Corpo comum da listagem de autorizações (reutilizado em endpoints público e comissão)."""
+    """Corpo comum da listagem de autorizações (endpoints público e comissão).
+
+    No modo `publico` o DRE é mascarado e a busca considera apenas o nome —
+    buscar por DRE completo permitiria confirmar a existência de um aluno.
+    """
     subs = (
         db.query(Submissao)
         .filter(Submissao.status == "aprovada")
@@ -218,15 +238,16 @@ def _listar_autorizacoes(
                 continue
         if q:
             termo = q.lower()
-            dre = str(metadata.get("dre") or "").lower()
+            dre = "" if publico else str(metadata.get("dre") or "").lower()
             nome = str(metadata.get("nome") or "").lower()
             if termo not in dre and termo not in nome:
                 continue
+        dre_bruto = metadata.get("dre")
         linhas.append(
             {
                 "id": s.id,
                 "nome": metadata.get("nome"),
-                "dre": metadata.get("dre"),
+                "dre": mascarar_dre(dre_bruto) if publico else dre_bruto,
                 "liberadaEm": aut["liberadaEm"],
                 "validaAte": aut["validaAte"],
                 "diasParaVencer": aut["diasParaVencer"],
@@ -331,7 +352,7 @@ def decidir(
     user: Usuario = Depends(require_comissao),
 ):
     """Deliberação transacional: decisão + exceções + status + auditoria."""
-    sub = _obter_submissao(db, sub_id)
+    sub = _obter_submissao(db, sub_id, para_escrita=True)
     if sub.status not in STATUS_ABERTOS:
         raise HTTPException(409, "Submissão já concluída.")
 
@@ -383,7 +404,7 @@ def arquivar(
     validade) depende do status 'aprovada'. Para encerrar uma aprovada,
     revogue-a antes.
     """
-    sub = _obter_submissao(db, sub_id)
+    sub = _obter_submissao(db, sub_id, para_escrita=True)
     if sub.status in STATUS_ABERTOS:
         raise HTTPException(409, "Submissão ainda está em análise.")
     if sub.status == "aprovada":
@@ -411,7 +432,7 @@ def desarquivar(
     user: Usuario = Depends(require_comissao),
 ):
     """Restaura um processo arquivado ao status em que foi concluído."""
-    sub = _obter_submissao(db, sub_id)
+    sub = _obter_submissao(db, sub_id, para_escrita=True)
     if sub.status != "arquivada":
         raise HTTPException(409, "Submissão não está arquivada.")
 
@@ -436,7 +457,7 @@ def revogar(
     user: Usuario = Depends(require_comissao),
 ):
     """Revoga uma autorização previamente aprovada e invalida a licença."""
-    sub = _obter_submissao(db, sub_id)
+    sub = _obter_submissao(db, sub_id, para_escrita=True)
     if sub.status != "aprovada":
         raise HTTPException(409, "Só é possível revogar processos aprovados.")
 

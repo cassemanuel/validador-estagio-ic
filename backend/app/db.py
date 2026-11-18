@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import settings
@@ -22,6 +22,19 @@ def _set_sqlite_pragma(dbapi_conn, _):
 
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+def travar_escrita(db: Session) -> None:
+    """Adquire o lock de escrita do banco até o fim da transação corrente.
+
+    SQLite (modo WAL, um único escritor): um UPDATE sem efeito abre a
+    transação de escrita (lock RESERVED); outros escritores aguardam o
+    commit/rollback (busy timeout). Use antes de "ler-e-decidir" quando a
+    decisão não pode ser tomada sobre um estado já obsoleto. Em bancos com
+    lock de linha, combine com SELECT ... FOR UPDATE.
+    """
+    if db.get_bind().dialect.name == "sqlite":
+        db.execute(text("UPDATE audit_log SET id = id WHERE 0"))
 
 
 def get_db():
@@ -45,9 +58,15 @@ def init_db() -> None:
     models.Base.metadata.create_all(engine)
     _migrar_schemas()
 
-    # Provisiona usuários seed (SEED_USERS) e membros da comissão.
+    # Provisiona usuários seed (SEED_USERS) — somente com auth local —
+    # e promove membros da comissão (COMMISSION_USERS).
     with Session(engine) as db:
-        for entry in _parse_seed_users(settings.seed_users):
+        seeds = (
+            _parse_seed_users(settings.seed_users)
+            if settings.seeds_habilitados
+            else ()
+        )
+        for entry in seeds:
             username, senha, papel, nome = entry
             existe = db.query(Usuario).filter_by(username=username).first()
             if existe:

@@ -15,7 +15,7 @@ import {
   calcularProgressoIntegralizacao,
   renderSvgCrEvolution,
 } from '../discente/portal.js';
-import { carregarPainel, dialogConfirmar } from './painel.js';
+import { dialogConfirmar } from '../ui/dialog.js';
 import { carregarRegras } from '../rules/ppc2022.js';
 import { navegarPara } from '../router.js';
 
@@ -27,8 +27,15 @@ const TIPO_EXCECAO = {
   outros: 'Outro(s)',
 };
 
+// Listeners globais da Mesa aberta (ex.: Esc do visualizador). Abortados a
+// cada reabertura para não acumular handlers presos a processos antigos.
+let mesaAbort = null;
+
 export async function abrirMesa(subId, docInicial = 'boletim') {
   const mesa = document.getElementById('admin-mesa');
+  mesaAbort?.abort();
+  mesaAbort = new AbortController();
+  const { signal } = mesaAbort;
   clearElement(mesa);
 
   let sub;
@@ -58,7 +65,7 @@ export async function abrirMesa(subId, docInicial = 'boletim') {
   mesa.appendChild(header);
   mesa.appendChild(el('div', { className: 'mesa' }, [
     el('div', { className: 'mesa-col' }, [
-      renderLadoPdf(sub, docInicial),
+      renderLadoPdf(sub, docInicial, signal),
       tabelaDisciplinas,
     ]),
     col,
@@ -66,7 +73,7 @@ export async function abrirMesa(subId, docInicial = 'boletim') {
   mesa.appendChild(el('div', { className: 'mesa-rodape' }, evolucaoCR));
 }
 
-function renderLadoPdf(sub, docInicial = 'boletim') {
+function renderLadoPdf(sub, docInicial = 'boletim', signal) {
   const docs = sub.documentos || {};
   const [abaAtiva, setAbaAtiva] = useState(docInicial === 'boa' ? 'boa' : 'boletim');
 
@@ -149,7 +156,7 @@ function renderLadoPdf(sub, docInicial = 'boletim') {
     if (e.key === 'Escape' && wrap.classList.contains('mesa-pdf-fullscreen')) {
       atualizarEstadoFullscreen(false);
     }
-  });
+  }, { signal });
 
   const sha256 = docs.boletim?.sha256 || sub.pdfSha256;
   return el('div', { className: 'mesa-col' }, [
@@ -385,12 +392,30 @@ function renderDeliberacao(sub) {
       status: i.dataset.status,
     }));
 
+  const botoesDeliberacao = [];
+  const setDeliberando = (ativo) => {
+    botoesDeliberacao.forEach((b) => { b.disabled = ativo; });
+  };
+
   const decidir = async (decisao) => {
     if (decisao !== 'aprovada' && !motivo.value.trim()) {
       erro.textContent = 'Informe o motivo para indeferir ou devolver.';
       erro.hidden = false;
       return;
     }
+    if (decisao === 'aprovada') {
+      const nome = sub.metadata?.nome || `processo #${sub.id}`;
+      const ok = await dialogConfirmar({
+        titulo: 'Aprovar Processo',
+        mensagem: `Confirmar a aprovação de ${nome}? A autorização de estágio será emitida imediatamente.`,
+        comMotivo: false,
+        labelOk: 'Aprovar',
+      });
+      if (!ok) return;
+    }
+    erro.hidden = true;
+    // Evita duplo envio enquanto o POST está em andamento.
+    setDeliberando(true);
     try {
       await api(`/api/comissao/submissoes/${sub.id}/decisao`, {
         method: 'POST',
@@ -404,6 +429,7 @@ function renderDeliberacao(sub) {
     } catch (err) {
       erro.textContent = err.message;
       erro.hidden = false;
+      setDeliberando(false);
     }
   };
 
@@ -427,6 +453,7 @@ function renderDeliberacao(sub) {
   const criarBotao = (label, classe, decisao) => {
     const btn = el('button', { className: `btn ${classe}`, type: 'button' }, label);
     btn.addEventListener('click', () => decidir(decisao));
+    botoesDeliberacao.push(btn);
     return btn;
   };
 
@@ -442,6 +469,7 @@ function renderDeliberacao(sub) {
         mensagem: 'Informe o motivo da revogação da autorização.',
       });
       if (!motivo) return;
+      btnRevogar.disabled = true;
       try {
         await api(`/api/comissao/submissoes/${sub.id}/revogar`, {
           method: 'POST',
@@ -451,6 +479,7 @@ function renderDeliberacao(sub) {
       } catch (err) {
         erro.textContent = err.message;
         erro.hidden = false;
+        btnRevogar.disabled = false;
       }
     });
     botoes.appendChild(btnRevogar);
@@ -468,12 +497,14 @@ function renderDeliberacao(sub) {
         labelOk: 'Arquivar',
       });
       if (!ok) return;
+      btnArquivar.disabled = true;
       try {
         await api(`/api/comissao/submissoes/${sub.id}/arquivar`, { method: 'POST' });
         navegarPara('/admin/fila');
       } catch (err) {
         erro.textContent = err.message;
         erro.hidden = false;
+        btnArquivar.disabled = false;
       }
     });
     botoes.appendChild(el('p', { className: 'text-muted' },

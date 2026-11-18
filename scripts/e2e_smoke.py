@@ -2,8 +2,13 @@
 
 import json
 import sys
+from pathlib import Path
 
 import requests
+
+# PDFs sintéticos com nome/DRE no texto (o servidor confere a identidade).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend" / "tests"))
+from pdf_sintetico import pdf_com_texto  # noqa: E402
 
 BASE = "http://localhost:8000"
 
@@ -33,7 +38,7 @@ def main():
     payload = {
         "metadata": {
             "nome": "Discente Dois",
-            "dre": "aluno2",
+            "dre": "120000002",
             "tipoDocumento": "boa",
         },
         "periodos": [{"periodo": "2024/1", "disciplinas": disciplinas}],
@@ -41,11 +46,13 @@ def main():
         "diagnostico": {"apto": True, "criterios": []},
         "excecoes": [],
     }
+    boletim = pdf_com_texto("BOLETIM NAO OFICIAL", "Nome: Discente Dois", "DRE: 120000002")
+    boa = pdf_com_texto("BOLETIM DE ORIENTACAO ACADEMICA", "120000002 - Discente Dois")
     r = aluno.post(
         f"{BASE}/api/submissoes",
         files={
-            "boletim": ("boletim.pdf", b"%PDF-1.4 fake boletim", "application/pdf"),
-            "boa": ("boa.pdf", b"%PDF-1.4 fake boa", "application/pdf"),
+            "boletim": ("boletim.pdf", boletim, "application/pdf"),
+            "boa": ("boa.pdf", boa, "application/pdf"),
         },
         data={"payload": json.dumps(payload)},
     )
@@ -75,8 +82,8 @@ def main():
     r = aluno.post(
         f"{BASE}/api/submissoes",
         files={
-            "boletim": ("boletim2.pdf", b"%PDF-1.4 fake boletim v2", "application/pdf"),
-            "boa": ("boa2.pdf", b"%PDF-1.4 fake boa v2", "application/pdf"),
+            "boletim": ("boletim2.pdf", boletim, "application/pdf"),
+            "boa": ("boa2.pdf", boa, "application/pdf"),
         },
         data={"payload": json.dumps(payload)},
     )

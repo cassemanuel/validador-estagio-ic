@@ -28,6 +28,7 @@ import {
   formatNumberBR,
   validatePdfFile,
 } from '../ui/dom.js';
+import { dialogConfirmar, dialogAviso } from '../ui/dialog.js';
 
 const state = {
   boletim: null, // { file, historico }
@@ -46,6 +47,8 @@ const STATUS_LABEL = {
   indeferida: 'Indeferida',
   devolvida: 'Devolvida para correção',
   cancelada: 'Cancelada pelo discente',
+  revogada: 'Autorização revogada pela Comissão',
+  arquivada: 'Processo arquivado',
 };
 
 const STATUS_BADGE = {
@@ -55,6 +58,8 @@ const STATUS_BADGE = {
   indeferida: 'badge-reprovado',
   devolvida: 'badge-neutro',
   cancelada: 'badge-neutro',
+  revogada: 'badge-reprovado',
+  arquivada: 'badge-neutro',
 };
 
 const STATUS_ATIVOS = ['fila_regular', 'mesa_revisao'];
@@ -190,6 +195,9 @@ function aplicarBloqueioDeEnvio() {
 
 function isAutorizacaoBloqueante(autorizacao) {
   if (!autorizacao || autorizacao.expirada) return false;
+  // A janela de renovação é regra do servidor (RENOVACAO_JANELA_DIAS), que
+  // também bloqueia o envio; o fallback de 30 dias cobre respostas antigas.
+  if (typeof autorizacao.renovavel === 'boolean') return !autorizacao.renovavel;
   return autorizacao.diasParaVencer > 30;
 }
 
@@ -761,12 +769,20 @@ function renderStatus(container, sub) {
     : null;
   if (btnCancelar) {
     btnCancelar.addEventListener('click', async () => {
-      if (!confirm('Tem certeza que deseja cancelar esta solicitação?')) return;
+      const ok = await dialogConfirmar({
+        titulo: 'Cancelar Solicitação',
+        mensagem: 'Tem certeza que deseja cancelar esta solicitação? Os PDFs enviados serão apagados e a ação não pode ser desfeita.',
+        comMotivo: false,
+        labelOk: 'Cancelar solicitação',
+      });
+      if (!ok) return;
+      btnCancelar.disabled = true;
       try {
         await api(`/api/submissoes/${sub.id}/cancelar`, { method: 'POST' });
         await initPortal();
       } catch (err) {
-        alert(err.message);
+        btnCancelar.disabled = false;
+        await dialogAviso('Não foi possível cancelar', err.message);
       }
     });
   }
@@ -788,7 +804,7 @@ function renderStatus(container, sub) {
         : null,
       sub.autorizacao
         ? el('div', {
-            className: `card card-autorizacao ${sub.autorizacao.expirada || sub.autorizacao.diasParaVencer <= 30 ? 'card-aviso' : ''}`,
+            className: `card card-autorizacao ${sub.autorizacao.expirada || !isAutorizacaoBloqueante(sub.autorizacao) ? 'card-aviso' : ''}`,
           }, [
             el('strong', {}, `Autorização de estágio ${sub.autorizacao.expirada ? 'expirada' : 'vigente'}`),
             el('p', {},

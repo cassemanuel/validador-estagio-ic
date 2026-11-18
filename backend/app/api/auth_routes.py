@@ -11,7 +11,7 @@ from ..auth.jwt import (
 )
 from ..auth.provider import get_auth_provider
 from ..config import settings
-from ..db import get_db
+from ..db import _parse_seed_users, get_db
 from ..models import Usuario
 from ..schemas import LoginIn
 from ..services.auditoria import registrar
@@ -38,8 +38,17 @@ def login(body: LoginIn, response: Response, db: Session = Depends(get_db)):
         )
         db.add(user)
         db.flush()
-    elif info.nome and not user.nome:
-        user.nome = info.nome
+    else:
+        if info.nome and not user.nome:
+            user.nome = info.nome
+        # O diretório é a fonte de verdade do papel em logins LDAP:
+        # entrar/sair do grupo da comissão reflete no próximo login.
+        if settings.auth_provider == "ldap" and info.papel and info.papel != user.papel:
+            registrar(
+                db, user, "papel_alterado", "usuario", user.id,
+                {"de": user.papel, "para": info.papel},
+            )
+            user.papel = info.papel
 
     registrar(db, user, "login", "usuario", user.id)
     db.commit()
@@ -61,5 +70,12 @@ def me(user: Usuario = Depends(get_current_user)):
 
 @router.get("/info")
 def info():
-    """Público: informa o provedor de auth ativo (ex.: ocultar atalhos de dev)."""
-    return {"provider": settings.auth_provider}
+    """Público: provedor de auth ativo e, com auth local, os atalhos de login seed."""
+    resposta = {"provider": settings.auth_provider, "devLogin": False}
+    if settings.seeds_habilitados:
+        resposta["devLogin"] = True
+        resposta["devUsers"] = [
+            {"username": username, "senha": senha, "papel": papel, "nome": nome}
+            for username, senha, papel, nome in _parse_seed_users(settings.seed_users)
+        ]
+    return resposta

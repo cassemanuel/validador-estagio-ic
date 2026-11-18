@@ -263,6 +263,16 @@ def test_minhas_submissoes_com_e_sem_decisao(client):
         json={"decisao": "aprovada", "motivo": "Apto", "excecoes": []},
     )
 
+    # Autorização entra na janela de renovação (60 de 90 dias consumidos):
+    # só então o servidor aceita uma nova submissão.
+    from app.db import SessionLocal
+    from app.models import Submissao
+
+    with SessionLocal() as db:
+        s = db.get(Submissao, sub1["id"])
+        s.concluido_em = datetime.now(timezone.utc) - timedelta(days=60)
+        db.commit()
+
     login(client, "aluno1", "aluno123")
     sub2 = submeter(client).json()
 

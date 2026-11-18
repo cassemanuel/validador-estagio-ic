@@ -21,6 +21,8 @@ os.environ.setdefault(
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from .pdf_sintetico import pdf_com_texto  # noqa: E402,F401
+
 from app.main import app  # noqa: E402
 
 
@@ -41,6 +43,28 @@ def limpar_submissoes(client):
             db.query(model).delete()
         db.commit()
     yield
+
+
+DRE_ALUNO1 = "120000001"
+DRE_ALUNO2 = "120000002"
+
+
+def pdfs_do_payload(payload: dict) -> tuple[bytes, bytes]:
+    """Boletim e BOA sintéticos contendo o nome e o DRE do payload."""
+    meta = payload.get("metadata") or {}
+    nome = str(meta.get("nome") or "")
+    dre = str(meta.get("dre") or "")
+    boletim = pdf_com_texto(
+        "UNIVERSIDADE FEDERAL DO RIO DE JANEIRO",
+        "BOLETIM NAO OFICIAL",
+        f"Nome: {nome}",
+        f"DRE: {dre}",
+    )
+    boa = pdf_com_texto(
+        "BOLETIM DE ORIENTACAO ACADEMICA",
+        f"{dre} - {nome}",
+    )
+    return boletim, boa
 
 
 def login(client, username, senha):
@@ -71,7 +95,7 @@ def payload_apto(**overrides):
     payload = {
         "metadata": {
             "nome": "Aluno Exemplo",
-            "dre": "aluno1",
+            "dre": DRE_ALUNO1,
             "curso": "Ciência da Computação",
             "tipoDocumento": "boa",
             "ingresso": "2023/1",
@@ -88,8 +112,11 @@ def payload_apto(**overrides):
     return payload
 
 
-def submeter(client, payload=None, boletim_bytes=b"%PDF-1.4 fake boletim", boa_bytes=b"%PDF-1.4 fake boa"):
+def submeter(client, payload=None, boletim_bytes=None, boa_bytes=None):
     payload = payload if payload is not None else payload_apto()
+    boletim_padrao, boa_padrao = pdfs_do_payload(payload)
+    boletim_bytes = boletim_bytes if boletim_bytes is not None else boletim_padrao
+    boa_bytes = boa_bytes if boa_bytes is not None else boa_padrao
     return client.post(
         "/api/submissoes",
         files={

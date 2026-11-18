@@ -6,6 +6,7 @@ permanecem.
 """
 
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -14,7 +15,9 @@ from sqlalchemy.orm import Session
 from .auditoria import registrar
 from ..models import Submissao
 
-STATUS_CONCLUIDOS = ("aprovada", "indeferida", "devolvida", "arquivada")
+logger = logging.getLogger(__name__)
+
+STATUS_CONCLUIDOS = ("aprovada", "indeferida", "devolvida", "revogada", "arquivada")
 
 
 def executar_expurgo(db: Session, settings) -> int:
@@ -36,13 +39,11 @@ def executar_expurgo(db: Session, settings) -> int:
     )
 
     removidos = 0
+    a_remover: list[str] = []
     for sub in candidatas:
-        for attr in ("boletim_path", "boa_path", "pdf_path"):
-            path_str = getattr(sub, attr, None)
-            if path_str:
-                path = Path(path_str)
-                if path.exists():
-                    path.unlink()
+        a_remover.extend(
+            p for p in (sub.boletim_path, sub.boa_path, sub.pdf_path) if p
+        )
         sub.pdf_expurgado_em = datetime.now(timezone.utc)
         registrar(
             db,
@@ -56,7 +57,14 @@ def executar_expurgo(db: Session, settings) -> int:
             },
         )
         removidos += 1
+    # Commit antes de apagar: se a transação falhar, nenhum PDF referenciado
+    # por uma submissão "não expurgada" some do disco.
     db.commit()
+    for path_str in a_remover:
+        try:
+            Path(path_str).unlink(missing_ok=True)
+        except OSError:
+            logger.exception("Falha ao remover PDF expurgado %s", path_str)
     return removidos
 
 
@@ -70,5 +78,5 @@ async def purge_loop(settings, session_factory) -> None:
                 executar_expurgo(db, settings)
                 arquivar_antigos(db, settings)
         except Exception:  # noqa: BLE001 — o job nunca deve derrubar o app
-            pass
+            logger.exception("Falha no ciclo de expurgo/arquivamento")
         await asyncio.sleep(settings.purge_interval_seconds)

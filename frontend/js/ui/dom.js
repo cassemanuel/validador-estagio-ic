@@ -55,6 +55,14 @@ export function el(tag, attrs = {}, children) {
   const element = document.createElement(tag);
 
   Object.entries(attrs).forEach(([key, value]) => {
+    // Atributos booleanos: false/null/undefined omitem o atributo (senão
+    // `disabled: false` viraria disabled="false", que ainda desabilita);
+    // true gera o atributo vazio (`disabled=""`).
+    if (value === false || value === null || value === undefined) return;
+    if (value === true) {
+      element.setAttribute(key, '');
+      return;
+    }
     if (key === 'className') {
       element.className = value;
     } else if (key === 'dataset') {

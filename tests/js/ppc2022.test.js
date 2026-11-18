@@ -188,3 +188,20 @@ test('ingresso anterior a 2025/1 é isento do requisito de extensão', () => {
   assert.ok(apto);
   assert.ok(!criterios.some((c) => c.rotulo.includes('Extensão')));
 });
+
+test('período sintético "Aprovadas (BOA)" não conta no tempo máximo de curso', () => {
+  const h = historicoApto();
+  const max = regras.max_periodos_integralizacao;
+  // Exatamente o máximo de períodos letivos reais (AAAA/S)…
+  h.periodos = Array.from({ length: max }, (_, i) => ({
+    periodo: `${2015 + Math.floor(i / 2)}/${(i % 2) + 1}`,
+    disciplinas: i === 0 ? h.periodos[0].disciplinas : [],
+  }));
+  // …mais o agrupamento sintético adicionado ao mesclar o BOA.
+  h.periodos.push({ periodo: 'Aprovadas (BOA)', disciplinas: [] });
+  h.resumo = calcularCRAcumulado(h);
+  const { criterios } = verificarElegibilidadeEstagio(h, regras);
+  const tempo = criterios.find((c) => c.rotulo.startsWith('Tempo de curso'));
+  assert.ok(tempo.ok, tempo.detalhe);
+  assert.match(tempo.detalhe, new RegExp(`^${max} períodos`));
+});

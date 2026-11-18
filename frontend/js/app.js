@@ -8,6 +8,7 @@
  */
 
 import { api, AuthError } from './api/client.js';
+import { el, clearElement } from './ui/dom.js';
 import { loadThemePreference, saveThemePreference } from './ui/theme.js';
 import { initPortal } from './discente/portal.js';
 import { initPainel } from './comissao/painel.js';
@@ -300,18 +301,24 @@ function initLogin() {
 
 function initDevLogin() {
   api('/api/auth/info')
-    .then(({ provider }) => {
-      if (provider !== 'local') return;
+    .then(({ devLogin, devUsers }) => {
+      // O backend só envia os seeds em dev com auth local.
+      if (!devLogin || !Array.isArray(devUsers) || !devUsers.length) return;
       const dev = document.getElementById('login-dev');
-      dev.hidden = false;
-      dev.querySelectorAll('[data-dev-login]').forEach((btn) => {
+      const botoes = document.getElementById('login-dev-botoes');
+      if (!dev || !botoes) return;
+      clearElement(botoes);
+      devUsers.forEach((u) => {
+        const btn = el('button', { className: 'btn btn-secondary btn-sm', type: 'button' },
+          u.papel === 'comissao' ? `Comissão (${u.username})` : u.nome || u.username);
         btn.addEventListener('click', () => {
-          document.getElementById('login-username').value =
-            btn.dataset.devLogin;
-          document.getElementById('login-senha').value = btn.dataset.devSenha;
+          document.getElementById('login-username').value = u.username;
+          document.getElementById('login-senha').value = u.senha;
           document.getElementById('login-form').requestSubmit();
         });
+        botoes.appendChild(btn);
       });
+      dev.hidden = false;
     })
     .catch(() => {});
 }

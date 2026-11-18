@@ -17,6 +17,8 @@ _FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Fail-fast: segredos padrão/fracos abortam a subida fora de dev.
+    settings.validar_seguranca()
     init_db()
     purge_task = asyncio.create_task(purge_loop(settings, SessionLocal))
     yield
