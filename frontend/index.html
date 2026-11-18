@@ -434,7 +434,8 @@
           <ul>
             <li><strong>Magic bytes:</strong> todo PDF deve iniciar com <code>%PDF-</code>.</li>
             <li><strong>Limite de tamanho:</strong> 15 MB por arquivo.</li>
-            <li><strong>Path traversal:</strong> DRE é sanitizado e nomes seguem padrão fixo.</li>
+            <li><strong>Path traversal:</strong> arquivos gravados com nome aleatório (UUID), sem DRE ou outro dado pessoal no nome.</li>
+            <li><strong>Conferência do PDF no servidor:</strong> o texto é extraído com <code>pypdf</code> para confirmar nome, DRE e as disciplinas declaradas como concluídas; divergências bloqueiam o envio ou encaminham à Mesa de Revisão (<code>IDENTIDADE_PDF_MODO</code>).</li>
             <li><strong>PDF bombs:</strong> máximo de 25 páginas e <code>isEvalSupported: false</code>.</li>
             <li><strong>XSS:</strong> DOM renderiza text nodes e URLs são sanitizadas.</li>
             <li><strong>RBAC:</strong> endpoints <code>/api/comissao/*</code> exigem papel <code>comissao</code>.</li>
@@ -445,10 +446,12 @@
           <h3><i class="bi bi-lock"></i> Criptografia em Repouso</h3>
           <p>
             Os PDFs são cifrados com <strong>Fernet</strong> (AES-128-CBC + HMAC-SHA256) e
-            gravados como <code>data/uploads/*.bin</code>. A chave vem de
-            <code>STORAGE_ENCRYPTION_KEY</code> ou é derivada de <code>JWT_SECRET</code> via
-            PBKDF2-HMAC-SHA256. O servidor decifra o arquivo <strong>apenas em memória</strong>
-            durante o stream para a mesa de curadoria.
+            gravados como <code>data/uploads/{boletim,boa}_&lt;uuid&gt;.bin</code>. A chave
+            <code>STORAGE_ENCRYPTION_KEY</code> é <strong>obrigatória em produção</strong> (a
+            aplicação não sobe sem ela); só em desenvolvimento, se ausente, é derivada de
+            <code>JWT_SECRET</code> via PBKDF2-HMAC-SHA256. O servidor decifra o arquivo
+            <strong>apenas em memória</strong> durante o stream para a mesa de curadoria, com
+            <code>Cache-Control: no-store</code>.
           </p>
         </section>
 
@@ -456,8 +459,9 @@
           <h3><i class="bi bi-journal-check"></i> Integridade da Base</h3>
           <p>
             O SQLite roda em modo WAL (resiliência a quedas) e o <code>audit_log</code> é
-            imutável, com encadeamento de hash SHA-256 entre eventos. Qualquer alteração
-            posterior fica detectável.
+            imutável, com encadeamento de hash SHA-256 entre eventos. Cada novo evento é
+            gravado sob <strong>lock transacional de escrita</strong>, de modo que requisições
+            simultâneas não bifurcam a cadeia. Qualquer alteração posterior fica detectável.
           </p>
         </section>
 

@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -50,19 +51,35 @@ DRE_ALUNO2 = "120000002"
 
 
 def pdfs_do_payload(payload: dict) -> tuple[bytes, bytes]:
-    """Boletim e BOA sintéticos contendo o nome e o DRE do payload."""
+    """Boletim e BOA sintéticos coerentes com o payload.
+
+    Contêm nome e DRE e, como os documentos reais, as disciplinas: as dos
+    períodos letivos (AAAA/S) no Boletim e as do agrupamento "Aprovadas
+    (BOA)" no BOA — exigência da conferência server-side de códigos.
+    """
     meta = payload.get("metadata") or {}
     nome = str(meta.get("nome") or "")
     dre = str(meta.get("dre") or "")
+    linhas_boletim, linhas_boa = [], []
+    for periodo in payload.get("periodos") or []:
+        rotulo = str(periodo.get("periodo") or "")
+        destino = linhas_boletim if re.match(r"^\d{4}/\d$", rotulo) else linhas_boa
+        for d in periodo.get("disciplinas") or []:
+            destino.append(
+                f"{rotulo} {d.get('codigo', '')} {d.get('nome', '')} "
+                f"{d.get('grau', '')} {d.get('situacao', '')}"
+            )
     boletim = pdf_com_texto(
         "UNIVERSIDADE FEDERAL DO RIO DE JANEIRO",
         "BOLETIM NAO OFICIAL",
         f"Nome: {nome}",
         f"DRE: {dre}",
+        *linhas_boletim,
     )
     boa = pdf_com_texto(
         "BOLETIM DE ORIENTACAO ACADEMICA",
         f"{dre} - {nome}",
+        *linhas_boa,
     )
     return boletim, boa
 

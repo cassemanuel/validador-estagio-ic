@@ -520,3 +520,162 @@ def test_periodo_sintetico_nao_conta_no_tempo_de_curso():
     criterios = verificar_elegibilidade(payload, regras)["criterios"]
     tempo = next(c for c in criterios if c["rotulo"].startswith("Tempo de curso"))
     assert tempo["ok"], tempo["detalhe"]
+
+
+# ------------------------------------------- Ciclo 3: conferência dos PDFs
+
+
+def _alertas_da_submissao(sub_id):
+    with SessionLocal() as db:
+        return json.loads(db.get(Submissao, sub_id).alertas_saneamento_json or "[]")
+
+
+def test_modo_alertar_encaminha_para_mesa_em_vez_de_422(client, monkeypatch):
+    from app.api.submissoes import ALERTA_PDF_CONTINGENCIA
+
+    monkeypatch.setattr(settings, "identidade_pdf_modo", "alertar")
+    login(client, "aluno1", "aluno123")
+    outro = pdf_com_texto("BOLETIM NAO OFICIAL", "Nome: Outra Pessoa", "DRE: 199999999")
+    resp = submeter(client, boletim_bytes=outro)
+    assert resp.status_code == 200, resp.text
+    sub = resp.json()
+    assert sub["status"] == "mesa_revisao"
+    assert ALERTA_PDF_CONTINGENCIA in sub["alertas"]
+    assert any("DRE informado não consta no Boletim" in a for a in sub["alertas"])
+
+
+def test_modo_alertar_aceita_pdf_ilegivel(client, monkeypatch):
+    from app.api.submissoes import ALERTA_PDF_CONTINGENCIA
+
+    monkeypatch.setattr(settings, "identidade_pdf_modo", "alertar")
+    login(client, "aluno1", "aluno123")
+    resp = submeter(client, boa_bytes=b"%PDF-1.4 sem estrutura")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "mesa_revisao"
+    assert ALERTA_PDF_CONTINGENCIA in _alertas_da_submissao(resp.json()["id"])
+
+
+def test_modo_bloquear_e_o_padrao(client):
+    assert settings.identidade_pdf_modo == "bloquear"
+    login(client, "aluno1", "aluno123")
+    outro = pdf_com_texto("Nome: Outra Pessoa", "DRE: 199999999")
+    assert submeter(client, boletim_bytes=outro).status_code == 422
+
+
+def test_codigo_fabricado_gera_alerta_e_vai_para_mesa(client):
+    login(client, "aluno1", "aluno123")
+    payload = payload_apto()
+    boletim, boa = pdfs_do_payload(payload)  # PDFs "verdadeiros", sem a disciplina extra
+    payload["periodos"][0]["disciplinas"].append(
+        {"codigo": "XYZ999", "nome": "Inventada", "crR": 4, "grau": 10.0,
+         "pontos": 40.0, "situacao": "AP"}
+    )
+    resp = submeter(client, payload, boletim_bytes=boletim, boa_bytes=boa)
+    assert resp.status_code == 200, resp.text
+    sub = resp.json()
+    assert sub["status"] == "mesa_revisao"
+    assert any("XYZ999" in a and "não consta" in a for a in sub["alertas"])
+
+
+def test_codigo_nao_concluido_nao_e_exigido_no_pdf(client):
+    """Só disciplinas concluídas (AP/T) precisam constar no documento."""
+    login(client, "aluno1", "aluno123")
+    payload = payload_apto()
+    boletim, boa = pdfs_do_payload(payload)
+    payload["periodos"][0]["disciplinas"].append(
+        {"codigo": "XYZ998", "nome": "Cursando", "crR": 4, "grau": None, "situacao": "CURSANDO"}
+    )
+    resp = submeter(client, payload, boletim_bytes=boletim, boa_bytes=boa)
+    assert resp.json()["status"] == "fila_regular", resp.json()["alertas"]
+
+
+def test_aprovadas_do_boa_sao_conferidas_no_boa(client):
+    """O agrupamento "Aprovadas (BOA)" é conferido no BOA, não no Boletim."""
+    login(client, "aluno1", "aluno123")
+    payload = payload_apto()
+    payload["periodos"].append({
+        "periodo": "Aprovadas (BOA)",
+        "disciplinas": [{"codigo": "MAE992", "nome": "Optativa", "crR": 4,
+                         "grau": None, "situacao": "AP"}],
+    })
+    sub = submeter(client, payload).json()  # pdfs_do_payload põe MAE992 só no BOA
+    assert sub["status"] == "fila_regular", sub["alertas"]
+
+    _, boa_sem = pdfs_do_payload(payload_apto())
+    boletim, _ = pdfs_do_payload(payload)
+    with SessionLocal() as db:
+        db.query(Submissao).delete()
+        db.commit()
+    sub = submeter(client, payload, boletim_bytes=boletim, boa_bytes=boa_sem).json()
+    assert sub["status"] == "mesa_revisao"
+    assert any("MAE992" in a for a in sub["alertas"])
+
+
+def test_boletim_longo_le_alem_de_3_paginas():
+    """Históricos longos: códigos da 4ª página em diante também são lidos."""
+    import io
+
+    from pypdf import PdfReader, PdfWriter
+
+    from app.services.documento import conferir_documentos
+
+    writer = PdfWriter()
+    paginas = [
+        pdf_com_texto("Nome: Aluno Exemplo", f"DRE: {DRE_ALUNO1}"),
+        pdf_com_texto("2020/1 AAA111"),
+        pdf_com_texto("2020/2 BBB222"),
+        pdf_com_texto("2021/1 CCC333"),
+        pdf_com_texto("2021/2 DDD444"),
+    ]
+    for dados in paginas:
+        writer.add_page(PdfReader(io.BytesIO(dados)).pages[0])
+    saida = io.BytesIO()
+    writer.write(saida)
+    boletim = saida.getvalue()
+    boa = pdf_com_texto(f"{DRE_ALUNO1} - Aluno Exemplo")
+
+    periodos = [{"periodo": "2021/2", "disciplinas": [{"codigo": "DDD444", "situacao": "AP"}]}]
+    resultado = conferir_documentos(boletim, boa, "Aluno Exemplo", DRE_ALUNO1, periodos)
+    assert resultado.divergencias == []
+    assert resultado.codigos_ausentes == []
+
+
+# ------------------------------------------- Ciclo 3: HTTP e documentação
+
+
+def test_download_de_pdf_com_no_store(client):
+    login(client, "aluno1", "aluno123")
+    sub = submeter(client).json()
+    login(client, "comissao1", "comissao123")
+    for doc in ("boletim", "boa"):
+        resp = client.get(f"/api/comissao/submissoes/{sub['id']}/{doc}")
+        assert resp.status_code == 200
+        assert resp.headers["cache-control"] == "no-store"
+
+
+def test_headers_de_seguranca_em_todas_as_respostas(client):
+    for caminho in ("/api/health", "/", "/api/auth/me"):
+        resp = client.get(caminho)
+        assert resp.headers["x-content-type-options"] == "nosniff"
+        assert resp.headers["x-frame-options"] == "SAMEORIGIN"
+        assert resp.headers["referrer-policy"] == "same-origin"
+
+
+def test_docs_desativados_fora_de_dev(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    monkeypatch.setattr(settings, "env", "production")
+    c = TestClient(create_app())  # sem lifespan: só o roteamento importa aqui
+    for caminho in ("/docs", "/redoc", "/openapi.json"):
+        assert c.get(caminho).status_code == 404, caminho
+
+
+def test_docs_disponiveis_em_dev(client):
+    assert client.get("/docs").status_code == 200
+    assert client.get("/openapi.json").status_code == 200
+
+
+def test_rota_de_api_inexistente_responde_404(client):
+    assert client.get("/api/nao-existe").status_code == 404

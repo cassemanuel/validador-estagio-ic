@@ -2,6 +2,7 @@
 
 import base64
 from pathlib import Path
+from typing import Literal
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -77,6 +78,12 @@ class Settings(BaseSettings):
     archive_dir: str = "./data/archive"
     purge_interval_seconds: int = 3600
     max_pdf_size: int = 15 * 1024 * 1024  # 15 MB por arquivo PDF
+
+    # Conferência automática do texto dos PDFs (pypdf): 'bloquear' recusa a
+    # submissão (HTTP 422) quando nome/DRE não conferem ou o PDF é ilegível;
+    # 'alertar' é o modo de contingência (ex.: layout novo do SIGA) — aceita,
+    # registra alerta e encaminha para a Mesa de Revisão.
+    identidade_pdf_modo: Literal["bloquear", "alertar"] = "bloquear"
 
     # Autorização de estágio: validade após a liberação (dias)
     autorizacao_validade_dias: int = 90

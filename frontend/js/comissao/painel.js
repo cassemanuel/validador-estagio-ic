@@ -501,7 +501,8 @@ function renderLinha(sub) {
   const statusCell = el('td', {}, [
     el('span', { className: `badge ${statusClass[sub.status] || 'badge-neutro'}` },
       statusLabel[sub.status] || sub.status),
-    aprovacaoImediata ? el('span', { className: 'badge badge-ap' }, 'Aprovação imediata') : null,
+    // Piloto: sem selo de "Aprovação imediata" — toda aprovação passa pela
+    // conferência dos PDFs na Mesa.
     excecoes?.length ? el('span', { className: 'badge badge-neutro' }, `${excecoes.length} exceção(ões)`) : null,
     alertas?.length ? el('span', { className: 'badge badge-reprovado' }, `${alertas.length} alerta(s)`) : null,
   ]);

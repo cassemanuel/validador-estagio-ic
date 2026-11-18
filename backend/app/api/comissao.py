@@ -310,7 +310,15 @@ def _stream_pdf(path: str, sub: Submissao, user: Usuario, db: Session, acao: str
         yield crypto.decifrar(token)
 
     return StreamingResponse(
-        iterfile(), media_type="application/pdf", headers={"Content-Disposition": "inline"}
+        iterfile(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": "inline",
+            # PDFs de alunos não podem ficar no cache de navegadores em
+            # máquinas compartilhadas (laboratórios, secretaria).
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+        },
     )
 
 

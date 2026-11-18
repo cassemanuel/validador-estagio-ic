@@ -27,7 +27,7 @@ validador-estagio-ic/
 
 1. **Autenticação:** login via LDAP institucional ou desenvolvedor local; sessão em cookie httpOnly + JWT.
 2. **Upload:** discente anexa **Boletim Não Oficial + BOA**; parsing ocorre no navegador.
-3. **Saneamento:** backend recalcula elegibilidade com o espelho Python das regras e detecta divergências.
+3. **Conferência e saneamento:** o backend extrai o texto dos PDFs com `pypdf` e confere nome, DRE e as disciplinas declaradas como concluídas (ver §5); depois recalcula a elegibilidade com o espelho Python das regras e detecta divergências. Só o diagnóstico recalculado pelo servidor é persistido.
 4. **Triagem:** comissão acessa fila unificada; casos regulares são deferíveis em 1 clique; demais vão para mesa de revisão.
 5. **Decisão:** deferimento, indeferimento ou devolução gera `audit_log` e, se aprovado, autorização com validade de 90 dias.
 6. **Arquivamento:** processos concluídos (`indeferida`, `devolvida`, `cancelada`, `revogada`) podem ser arquivados pela comissão (`status = 'arquivada'`), saindo da fila ativa e das métricas de pendentes — evento registrado no `audit_log`.
@@ -46,18 +46,20 @@ validador-estagio-ic/
 | Camada | Medida |
 |--------|--------|
 | Upload | Magic bytes `%PDF-`, limite 15 MB, content-type restrito. |
-| Path traversal | DRE sanitizado; padrão de nome fixo; `spa_fallback` confinado ao diretório `frontend/` via caminho canônico (`resolve()` + `is_relative_to`, 404 para escapes). |
+| Path traversal | Arquivos gravados com nome aleatório (UUID), sem DRE no nome; `spa_fallback` confinado ao diretório `frontend/` via caminho canônico (`resolve()` + `is_relative_to`, 404 para escapes). |
+| Conferência do PDF | `services/documento.py` extrai o texto (`pypdf`): nome e DRE devem constar no Boletim e no BOA; códigos concluídos dos períodos letivos devem constar no Boletim (todas as páginas) e os do grupo "Aprovadas (BOA)" no BOA. Identidade divergente ou PDF ilegível → HTTP 422 (`IDENTIDADE_PDF_MODO=bloquear`, padrão) ou alerta + Mesa de Revisão (`alertar`, contingência). Código ausente → alerta + Mesa de Revisão. |
 | PDF bomb | Máximo 25 páginas; worker local. |
 | XSS | Text nodes; URLs sanitizadas. |
 | RBAC | Endpoints `/api/comissao/*` exigem papel `comissao`. |
 | Criptografia at-rest | Fernet (AES-128-CBC + HMAC-SHA256) em `data/uploads/*.bin`. |
-| Integridade | `audit_log` imutável com hash chain SHA-256. |
+| Integridade | `audit_log` imutável com hash chain SHA-256; cada registro é gravado sob lock transacional de escrita (`db.travar_escrita`), evitando bifurcação da cadeia em requisições simultâneas. |
+| HTTP | `X-Content-Type-Options`, `X-Frame-Options: SAMEORIGIN` e `Referrer-Policy` em todas as respostas; PDFs com `Cache-Control: no-store`; `/docs`, `/redoc` e `/openapi.json` desativados fora de `ENV=dev`. |
 
 ## 6. Criptografia em repouso
 
-- Chave: `STORAGE_ENCRYPTION_KEY` no `.env` ou derivada de `JWT_SECRET` via PBKDF2-HMAC-SHA256.
-- Arquivos salvos: `data/uploads/{boletim,boa}_{dre}_{timestamp}.bin`.
-- Decifragem: apenas no momento do stream para a mesa de revisão; nunca persistido em disco.
+- Chave: `STORAGE_ENCRYPTION_KEY` no `.env`, **obrigatória em produção** (`ENV` diferente de dev ou `AUTH_PROVIDER=ldap`): a aplicação não sobe sem ela. Só em desenvolvimento, se ausente, é derivada de `JWT_SECRET` via PBKDF2-HMAC-SHA256.
+- Arquivos salvos: `data/uploads/{boletim,boa}_<uuid4>.bin` (sem dados pessoais no nome).
+- Decifragem: apenas no momento do stream para a mesa de revisão; nunca persistido em disco; resposta com `Cache-Control: no-store`.
 
 ## 7. Modelo de dados (resumo)
 

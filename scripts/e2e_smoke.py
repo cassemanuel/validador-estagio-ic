@@ -46,7 +46,11 @@ def main():
         "diagnostico": {"apto": True, "criterios": []},
         "excecoes": [],
     }
-    boletim = pdf_com_texto("BOLETIM NAO OFICIAL", "Nome: Discente Dois", "DRE: 120000002")
+    # O servidor confere se as disciplinas concluídas constam no Boletim.
+    boletim = pdf_com_texto(
+        "BOLETIM NAO OFICIAL", "Nome: Discente Dois", "DRE: 120000002",
+        *[f"2024/1 {d['codigo']} {d['nome']}" for d in disciplinas],
+    )
     boa = pdf_com_texto("BOLETIM DE ORIENTACAO ACADEMICA", "120000002 - Discente Dois")
     r = aluno.post(
         f"{BASE}/api/submissoes",

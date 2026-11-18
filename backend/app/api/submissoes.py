@@ -25,6 +25,10 @@ router = APIRouter(prefix="/api/submissoes", tags=["submissoes"])
 
 STATUS_ATIVOS = ("fila_regular", "mesa_revisao")
 MAX_PAYLOAD_CHARS = 250_000
+ALERTA_PDF_CONTINGENCIA = (
+    "Validação automática do PDF indisponível ou divergente — conferir "
+    "documento original."
+)
 
 logger = logging.getLogger(__name__)
 
@@ -183,22 +187,40 @@ def criar_submissao(
     dados_boletim = _validar_pdf(boletim, "boletim")
     dados_boa = _validar_pdf(boa, "BOA")
 
-    divergencias = documento.conferir_identidade(
-        {"Boletim": dados_boletim, "BOA": dados_boa},
+    conferencia = documento.conferir_documentos(
+        dados_boletim,
+        dados_boa,
         body.metadata.get("nome"),
         body.metadata.get("dre"),
+        body.periodos,
     )
-    if divergencias:
-        raise HTTPException(
-            422,
-            "Os documentos não conferem com os dados informados: "
-            + " ".join(divergencias),
+    alertas_documento: list[str] = []
+    if conferencia.divergencias:
+        if settings.identidade_pdf_modo == "bloquear":
+            raise HTTPException(
+                422,
+                "Os documentos não conferem com os dados informados: "
+                + " ".join(conferencia.divergencias),
+            )
+        # Contingência (ex.: layout novo do SIGA): aceita e manda para a Mesa.
+        alertas_documento.append(ALERTA_PDF_CONTINGENCIA)
+        alertas_documento.extend(conferencia.divergencias)
+    if conferencia.codigos_ausentes:
+        alertas_documento.append(
+            f"{len(conferencia.codigos_ausentes)} disciplina(s) declarada(s) como "
+            "concluída(s) não consta(m) no documento de origem: "
+            + ", ".join(conferencia.codigos_ausentes[:15])
+            + ("…" if len(conferencia.codigos_ausentes) > 15 else "")
+            + "."
         )
 
     dados = body.model_dump(exclude={"excecoes"})
     regras = get_regras()
     try:
         resultado = saneamento.analisar(dados, regras, user.username)
+        # Alertas da conferência dos PDFs entram antes da triagem: qualquer
+        # um deles força a Mesa de Revisão.
+        resultado["alertas"] = alertas_documento + resultado["alertas"]
         # Somente o diagnóstico recalculado pelo servidor é persistido; o
         # declarado pelo cliente serve apenas para o alerta de divergência.
         diagnostico = resultado["diagnostico_recalculado"]
@@ -210,9 +232,8 @@ def criar_submissao(
         # humana caso o processamento das regras falhe inesperadamente.
         logger.exception("Erro no saneamento/triagem da submissão")
         resultado = {
-            "alertas": [
-                "Falha no recálculo automático — conferência manual obrigatória."
-            ]
+            "alertas": alertas_documento
+            + ["Falha no recálculo automático — conferência manual obrigatória."]
         }
         diagnostico = {}
         status = "mesa_revisao"

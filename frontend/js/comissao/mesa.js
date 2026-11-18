@@ -31,6 +31,29 @@ const TIPO_EXCECAO = {
 // cada reabertura para não acumular handlers presos a processos antigos.
 let mesaAbort = null;
 
+const ROTULO_DOC = { boletim: 'Boletim', boa: 'BOA' };
+
+/**
+ * Registra quais PDFs o membro da comissão já abriu nesta Mesa. No piloto,
+ * "Aprovar" só é liberado depois que Boletim e BOA foram visualizados (no
+ * visualizador embutido ou em nova guia).
+ */
+function criarControleVisualizacao(docs) {
+  const vistos = new Set();
+  const ouvintes = new Set();
+  const nomes = ['boletim', 'boa'];
+  return {
+    marcar(nome) {
+      if (vistos.has(nome)) return;
+      vistos.add(nome);
+      ouvintes.forEach((fn) => fn());
+    },
+    pendentes: () => nomes.filter((n) => docs[n]?.disponivel && !vistos.has(n)),
+    indisponiveis: () => nomes.filter((n) => !docs[n]?.disponivel),
+    aoMudar: (fn) => ouvintes.add(fn),
+  };
+}
+
 export async function abrirMesa(subId, docInicial = 'boletim') {
   const mesa = document.getElementById('admin-mesa');
   mesaAbort?.abort();
@@ -60,12 +83,13 @@ export async function abrirMesa(subId, docInicial = 'boletim') {
   ]);
 
   const regras = await carregarRegras();
-  const { col, tabelaDisciplinas, evolucaoCR } = renderLadoDados(sub, regras);
+  const controleDocs = criarControleVisualizacao(sub.documentos || {});
+  const { col, tabelaDisciplinas, evolucaoCR } = renderLadoDados(sub, regras, controleDocs);
 
   mesa.appendChild(header);
   mesa.appendChild(el('div', { className: 'mesa' }, [
     el('div', { className: 'mesa-col' }, [
-      renderLadoPdf(sub, docInicial, signal),
+      renderLadoPdf(sub, docInicial, signal, controleDocs),
       tabelaDisciplinas,
     ]),
     col,
@@ -73,28 +97,41 @@ export async function abrirMesa(subId, docInicial = 'boletim') {
   mesa.appendChild(el('div', { className: 'mesa-rodape' }, evolucaoCR));
 }
 
-function renderLadoPdf(sub, docInicial = 'boletim', signal) {
+function renderLadoPdf(sub, docInicial = 'boletim', signal, controleDocs) {
   const docs = sub.documentos || {};
   const [abaAtiva, setAbaAtiva] = useState(docInicial === 'boa' ? 'boa' : 'boletim');
 
   const tabs = el('div', { className: 'app-nav segmented' });
-  const conteudo = el('div', { className: 'mesa-pdf-wrap' });
+  // Contêiner visível do visualizador: a troca de aba renderiza aqui.
+  const wrap = el('div', { className: 'mesa-pdf-wrap' });
 
   const renderAba = (nome) => {
-    clearElement(conteudo);
+    clearElement(wrap);
     const doc = docs[nome];
     if (!doc?.disponivel) {
-      conteudo.appendChild(el('div', { className: 'card' }, [
+      wrap.appendChild(el('div', { className: 'card' }, [
         el('p', { className: 'text-muted' },
           `${nome.toUpperCase()} indisponível ou expurgado por política de retenção.`),
       ]));
       return;
     }
-    conteudo.appendChild(el('iframe', {
+    const iframe = el('iframe', {
       className: 'mesa-pdf',
       src: doc.url,
       title: `PDF ${nome.toUpperCase()} submetido pelo discente`,
-    }));
+    });
+    // Conta como visualizado só quando o PDF de fato carregou (uma resposta
+    // de erro da API chega como JSON e não libera a aprovação).
+    iframe.addEventListener('load', () => {
+      let tipo = null;
+      try {
+        tipo = iframe.contentDocument?.contentType || null;
+      } catch {
+        tipo = null;
+      }
+      if (!tipo || tipo === 'application/pdf') controleDocs?.marcar(nome);
+    });
+    wrap.appendChild(iframe);
   };
 
   ['boletim', 'boa'].forEach((nome) => {
@@ -128,13 +165,9 @@ function renderLadoPdf(sub, docInicial = 'boletim', signal) {
     // Lê a aba ativa no momento do clique (padrão: boletim).
     const abaAtivaEl = tabs.querySelector('.tab-doc.active');
     const docAtual = abaAtivaEl?.dataset.doc || 'boletim';
-    window.open(`/api/comissao/submissoes/${sub.id}/${docAtual}`, '_blank');
+    window.open(`/api/comissao/submissoes/${sub.id}/${docAtual}`, '_blank', 'noopener');
+    controleDocs?.marcar(docAtual);
   });
-
-  const wrap = el('div', { className: 'mesa-pdf-wrap' });
-  while (conteudo.firstChild) {
-    wrap.appendChild(conteudo.firstChild);
-  }
 
   const btnFecharFloat = el('button', {
     className: 'btn-fechar-pdf-fullscreen hidden',
@@ -197,7 +230,7 @@ function contarCursos(metadata) {
   return codigos.size;
 }
 
-function renderLadoDados(sub, regras) {
+function renderLadoDados(sub, regras, controleDocs) {
   const col = el('div', { className: 'mesa-col' }, [el('h3', {}, 'Dados extraídos')]);
   const { metadata, diagnostico, alertas, periodos } = sub;
   const tabelaDisciplinas = renderTabelaDisciplinas(sub);
@@ -278,7 +311,7 @@ function renderLadoDados(sub, regras) {
   );
 
   col.appendChild(renderExcecoes(sub));
-  col.appendChild(renderDeliberacao(sub));
+  col.appendChild(renderDeliberacao(sub, controleDocs));
 
   return { col, tabelaDisciplinas, evolucaoCR };
 }
@@ -379,12 +412,17 @@ function renderTabelaDisciplinas(sub) {
   return container;
 }
 
-function renderDeliberacao(sub) {
+function renderDeliberacao(sub, controleDocs) {
   const motivo = el('textarea', {
     placeholder: 'Motivo da deliberação (obrigatório para indeferir/devolver)',
+    'aria-label': 'Motivo da deliberação',
     rows: '3',
   });
   const erro = el('p', { className: 'login-erro', role: 'alert', hidden: true });
+  // Aviso discreto enquanto Boletim e BOA não foram abertos (piloto).
+  const avisoDocs = el('p', {
+    className: 'text-muted aviso-documentos', role: 'status', 'aria-live': 'polite',
+  });
 
   const coletarDecisoesExcecoes = () =>
     [...document.querySelectorAll('input[data-exc-id]:checked')].map((i) => ({
@@ -393,8 +431,34 @@ function renderDeliberacao(sub) {
     }));
 
   const botoesDeliberacao = [];
+  let btnAprovar = null;
+  let deliberando = false;
+
+  // "Aprovar" exige os dois PDFs abertos; indeferir/devolver não.
+  const aprovacaoBloqueada = () => {
+    if (!controleDocs) return false;
+    return controleDocs.pendentes().length > 0 || controleDocs.indisponiveis().length > 0;
+  };
+  const atualizarBotoes = () => {
+    botoesDeliberacao.forEach((b) => {
+      b.disabled = deliberando || (b === btnAprovar && aprovacaoBloqueada());
+    });
+    if (!controleDocs) return;
+    const indisponiveis = controleDocs.indisponiveis();
+    const pendentes = controleDocs.pendentes();
+    if (indisponiveis.length) {
+      avisoDocs.textContent = `Aprovação indisponível: ${indisponiveis.map((n) => ROTULO_DOC[n]).join(' e ')} `
+        + 'não pode ser conferido. Indefira ou devolva o processo.';
+    } else if (pendentes.length) {
+      avisoDocs.textContent = `Para aprovar, abra antes: ${pendentes.map((n) => ROTULO_DOC[n]).join(' e ')}.`;
+    } else {
+      avisoDocs.textContent = '';
+    }
+    avisoDocs.hidden = !avisoDocs.textContent;
+  };
   const setDeliberando = (ativo) => {
-    botoesDeliberacao.forEach((b) => { b.disabled = ativo; });
+    deliberando = ativo;
+    atualizarBotoes();
   };
 
   const decidir = async (decisao) => {
@@ -404,6 +468,7 @@ function renderDeliberacao(sub) {
       return;
     }
     if (decisao === 'aprovada') {
+      if (aprovacaoBloqueada()) return; // defesa extra: botão já desabilitado
       const nome = sub.metadata?.nome || `processo #${sub.id}`;
       const ok = await dialogConfirmar({
         titulo: 'Aprovar Processo',
@@ -484,7 +549,8 @@ function renderDeliberacao(sub) {
     });
     botoes.appendChild(btnRevogar);
   } else if (emAnalise) {
-    botoes.appendChild(criarBotao('Aprovar', 'btn-primary', 'aprovada'));
+    btnAprovar = criarBotao('Aprovar', 'btn-primary', 'aprovada');
+    botoes.appendChild(btnAprovar);
     botoes.appendChild(criarBotao('Indeferir', 'btn-danger', 'indeferida'));
     botoes.appendChild(criarBotao('Devolver', 'btn-secondary', 'devolvida'));
   } else if (STATUS_ARQUIVAVEIS.includes(sub.status)) {
@@ -514,6 +580,11 @@ function renderDeliberacao(sub) {
     botoes.appendChild(el('p', { className: 'text-muted' }, 'Processo arquivado.'));
   }
 
+  if (emAnalise) {
+    controleDocs?.aoMudar(atualizarBotoes);
+    atualizarBotoes();
+  }
+
   return el('div', { className: 'card' }, [
     el('h4', {}, 'Deliberação'),
     emAnalise ? el('div', { className: 'respostas-rapidas' }, [
@@ -522,6 +593,7 @@ function renderDeliberacao(sub) {
     ]) : null,
     emAnalise ? motivo : null,
     erro,
+    emAnalise ? avisoDocs : null,
     botoes,
   ]);
 }
