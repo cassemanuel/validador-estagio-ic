@@ -12,7 +12,6 @@ import { processarPDF } from '../parsers/pdfParser.js';
 import { processarBOA } from '../parsers/boaParser.js';
 import {
   calcularCRAcumulado,
-  disciplinaConcluida,
   extrairPesoDisciplina,
 } from '../domain/cr.js';
 import {
@@ -29,16 +28,33 @@ import {
   validatePdfFile,
 } from '../ui/dom.js';
 import { dialogConfirmar, dialogAviso } from '../ui/dialog.js';
+import {
+  CREDITOS_ELETIVAS_EXIGIDOS,
+  FONTE_BOA_CUMPRIDA,
+  PERIODO_BOA,
+  creditosEletivasCursadas,
+  disciplinaCursada,
+  listarEletivasCursadas,
+} from '../domain/eletivas.js';
 
 const state = {
-  boletim: null, // { file, historico }
+  boletim: null, // { file, historico } — histórico do Boletim, nunca mutado
   boa: null,     // { file, dados }
+  merged: null,  // { metadata, periodos, resumo } — Boletim + aprovadas do BOA
   regras: null,
   diagnostico: null,
   excecoes: [],
   alertasCruzamento: [],
   submissaoBloqueada: false,
+  // 'submissao' quando a análise foi pré-carregada do banco: o primeiro
+  // upload novo descarta tudo para não misturar documentos.
+  origem: null,
 };
+
+// Listeners do portal são registrados uma única vez: initPortal() roda a cada
+// navegação para /aluno e, sem esta trava, cada upload disparava o parsing N
+// vezes, com respostas concorrentes sobrescrevendo o estado.
+let listenersRegistrados = false;
 
 const STATUS_LABEL = {
   fila_regular: 'Na fila de aprovação',
@@ -91,22 +107,31 @@ export async function initPortal() {
     }
   };
 
-  initUploads();
-
-  alunoNav?.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-aluno-tab]');
-    if (!btn || btn.disabled) return;
-    ativarAba(btn.dataset.alunoTab);
-  });
-
-  btnLimpar?.addEventListener('click', () => {
+  const limparTela = () => {
     resetUploadState();
     clearElement(document.getElementById('discente-revisao'));
     clearElement(document.getElementById('discente-analise'));
     document.getElementById('discente-revisao').hidden = true;
     ativarAba('submissao');
     habilitarAnalise(false);
-  });
+  };
+
+  if (!listenersRegistrados) {
+    listenersRegistrados = true;
+    initUploads();
+
+    alunoNav?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-aluno-tab]');
+      if (!btn || btn.disabled) return;
+      ativarAba(btn.dataset.alunoTab);
+    });
+
+    btnLimpar?.addEventListener('click', limparTela);
+  }
+
+  // Cada entrada no portal parte do zero: nada da visita anterior (uploads,
+  // diagnóstico, exceções) sobrevive; os dados do banco são recarregados.
+  limparTela();
 
   try {
     state.regras = await carregarRegras();
@@ -148,6 +173,13 @@ export async function initPortal() {
 function carregarSubmissaoExistente(sub) {
   if (!sub?.periodos?.length) return false;
 
+  // O payload salvo já traz o período sintético do BOA; separa de volta o que
+  // é do Boletim e o que veio do BOA para o merge recompor sem duplicar.
+  const periodosBoletim = sub.periodos.filter((p) => p.periodo !== PERIODO_BOA);
+  const doBoa = sub.periodos
+    .filter((p) => p.periodo === PERIODO_BOA)
+    .flatMap((p) => p.disciplinas || []);
+
   state.boletim = {
     file: null,
     historico: {
@@ -155,7 +187,7 @@ function carregarSubmissaoExistente(sub) {
         ...(sub.metadata || {}),
         tipoDocumento: sub.tipoDocumento || sub.metadata?.tipoDocumento || 'boletim',
       },
-      periodos: sub.periodos,
+      periodos: periodosBoletim,
     },
   };
   state.boa = {
@@ -165,10 +197,13 @@ function carregarSubmissaoExistente(sub) {
       resumo: sub.resumoBoa || {},
       obrigatorias: sub.pendencias?.obrigatorias || [],
       optativas: sub.pendencias?.optativas || [],
+      aprovadas: doBoa.filter((d) => d.fonte !== FONTE_BOA_CUMPRIDA),
+      cumpridos: doBoa.filter((d) => d.fonte === FONTE_BOA_CUMPRIDA),
     },
   };
-  state.diagnostico = sub.diagnostico || null;
+  state.origem = 'submissao';
   mergeAndDiagnose();
+  state.diagnostico = sub.diagnostico || state.diagnostico;
   return true;
 }
 
@@ -204,10 +239,22 @@ function isAutorizacaoBloqueante(autorizacao) {
 function resetUploadState() {
   state.boletim = null;
   state.boa = null;
+  state.merged = null;
   state.diagnostico = null;
   state.excecoes = [];
+  state.alertasCruzamento = [];
+  state.origem = null;
   updateUploadBadges();
   updateConfirmButton();
+}
+
+/** Desabilita a aba de análise até haver Boletim e BOA desta sessão. */
+function bloquearAbaAnalise() {
+  const btn = document.querySelector('[data-aluno-tab="analise"]');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.setAttribute('data-tooltip', 'Ativa somente ao carregar o BOA e o Boletim');
+  document.querySelector('[data-aluno-tab="submissao"]')?.click();
 }
 
 function initUploads() {
@@ -293,6 +340,17 @@ async function handleUpload(tipo, file, { progress, progressBar }) {
   if (progressBar) progressBar.style.width = '0%';
   limparErroUpload(revisao, analise);
 
+  // Análise pré-carregada do banco: o primeiro documento novo descarta o par
+  // antigo inteiro (nunca mistura Boletim novo com BOA de outra submissão).
+  if (state.origem === 'submissao') resetUploadState();
+  // Qualquer troca de documento invalida o merge e o diagnóstico anteriores.
+  state.merged = null;
+  state.diagnostico = null;
+  state.alertasCruzamento = [];
+  state.excecoes = [];
+  state.origem = 'upload';
+  bloquearAbaAnalise();
+
   try {
     await validatePdfFile(file);
     const rawBuffer = await file.arrayBuffer();
@@ -344,7 +402,10 @@ async function handleUpload(tipo, file, { progress, progressBar }) {
     // Reset para permitir nova tentativa.
     if (tipo === 'boletim') state.boletim = null;
     else state.boa = null;
+    state.merged = null;
+    state.diagnostico = null;
     updateUploadBadges();
+    updateConfirmButton();
   } finally {
     progress?.classList.add('hidden');
   }
@@ -380,66 +441,68 @@ function mergeAndDiagnose() {
     boa?.metadata
   );
 
-  // BOA: adiciona disciplinas já aprovadas/cumpridas por coluna e pendências.
-  const concluidasBOA = [...(boa.aprovadas || []), ...(boa.cumpridos || [])];
-  if (concluidasBOA.length) {
-    const existentes = new Set(
-      historico.periodos.flatMap((p) =>
-        (p.disciplinas || []).map((d) => d.codigo)
-      )
-    );
-    const novas = concluidasBOA.filter((d) => !existentes.has(d.codigo));
-    if (novas.length) {
-      historico.periodos.push({
-        periodo: 'Aprovadas (BOA)',
-        disciplinas: novas,
-        totais: {},
-      });
-    }
+  // O histórico do Boletim é a fonte da verdade e nunca é alterado: o merge
+  // produz um objeto novo a cada chamada (troca de BOA não deixa resíduo).
+  const periodosBoletim = (historico.periodos || [])
+    .filter((p) => p.periodo !== PERIODO_BOA);
+  const existentes = new Set(
+    periodosBoletim.flatMap((p) => (p.disciplinas || [])
+      .map((d) => String(d.codigo || '').trim().toUpperCase()))
+  );
+
+  // BOA complementa só com o que está concluído e ausente do Boletim:
+  // zona de aprovadas (código real) e colunas do elenco já cumpridas (estas
+  // contam para obrigatórias/equivalências, nunca como eletivas).
+  const doBoa = [];
+  for (const d of [...(boa.aprovadas || []), ...(boa.cumpridos || [])]) {
+    const codigo = String(d.codigo || '').trim().toUpperCase();
+    if (!codigo || existentes.has(codigo) || !disciplinaCursada(d)) continue;
+    existentes.add(codigo);
+    doBoa.push({ ...d });
   }
+  const periodos = doBoa.length
+    ? [...periodosBoletim, { periodo: PERIODO_BOA, disciplinas: doBoa, totais: {} }]
+    : periodosBoletim;
 
   // Metadados: prioriza o Boletim, mas preenche gaps com o BOA.
+  const metadata = { ...(historico.metadata || {}) };
   for (const campo of ['nome', 'dre', 'curso']) {
-    if (!historico.metadata[campo] && boa.metadata?.[campo]) {
-      historico.metadata[campo] = boa.metadata[campo];
-    }
+    if (!metadata[campo] && boa.metadata?.[campo]) metadata[campo] = boa.metadata[campo];
   }
   // Cursos detectados: união dos códigos do Boletim e do BOA
   // (transferência interna pode aparecer em qualquer documento).
   const cursos = new Map();
-  for (const c of [
-    ...(historico.metadata.cursos || []),
-    ...(boa.metadata?.cursos || []),
-  ]) {
+  for (const c of [...(metadata.cursos || []), ...(boa.metadata?.cursos || [])]) {
     const cod = String(c).match(/\d{4,6}/)?.[0];
     if (cod && !cursos.has(cod)) cursos.set(cod, String(c));
   }
-  historico.metadata.cursos = [...cursos.values()];
-  if (!historico.metadata.tipoDocumento) {
-    historico.metadata.tipoDocumento = 'boa';
-  }
+  metadata.cursos = [...cursos.values()];
+  if (!metadata.tipoDocumento) metadata.tipoDocumento = 'boa';
 
-  historico.resumo = calcularCRAcumulado(historico);
-  const dadosElegibilidade = {
-    ...historico,
-    resumoBoa: state.boa?.dados?.resumo || {},
-  };
+  const merged = { metadata, periodos };
+  merged.resumo = calcularCRAcumulado(merged);
+  state.merged = merged;
+
   state.diagnostico = state.regras
-    ? verificarElegibilidadeEstagio(dadosElegibilidade, state.regras)
+    ? verificarElegibilidadeEstagio(
+      { ...merged, resumoBoa: boa.resumo || {} },
+      state.regras
+    )
     : null;
 }
 
 function getMergedDados() {
-  const historico = state.boletim?.historico || { metadata: {}, periodos: [] };
+  const base = state.merged
+    || { metadata: state.boletim?.historico?.metadata || {}, periodos: state.boletim?.historico?.periodos || [] };
   const boa = state.boa?.dados || { obrigatorias: [], optativas: [], metadata: {} };
   return {
     metadata: {
-      ...historico.metadata,
+      ...base.metadata,
       emissaoBoa: boa.metadata?.emissao || null,
     },
-    periodos: historico.periodos,
+    periodos: base.periodos,
     pendencias: { obrigatorias: boa.obrigatorias || [], optativas: boa.optativas || [] },
-    resumo: historico.resumo,
+    resumo: base.resumo,
   };
 }
 
@@ -720,8 +783,33 @@ export function renderSvgCrEvolution(periodos, crAcumuladoTotal) {
   pathSem.setAttribute('fill', 'none');
   svg.appendChild(pathSem);
 
-  // pontos com tooltip
-  const tooltip = el('div', { className: 'chart-tooltip', hidden: true });
+  // pontos com tooltip — o balão acompanha o ponto (acima dele; abaixo quando
+  // não há espaço no topo) e fica limitado à área do gráfico, sem cobrir a
+  // legenda, que é renderizada fora do SVG.
+  const tooltip = el('div', { className: 'chart-tooltip', role: 'tooltip', hidden: true });
+  let wrapper = null;
+  const mostrarTooltip = (i, ponto) => {
+    const semestral = periodos[i]?.cr;
+    tooltip.textContent = `${ponto.periodo}: CR acumulado ${formatNumberBR(ponto.cr, 3)}`
+      + (typeof semestral === 'number' ? ` · semestral ${formatNumberBR(semestral, 3)}` : '');
+    tooltip.hidden = false;
+
+    const caixaSvg = svg.getBoundingClientRect();
+    const caixaWrap = wrapper.getBoundingClientRect();
+    const escalaX = caixaSvg.width / width;
+    const escalaY = caixaSvg.height / height;
+    const pontoX = caixaSvg.left - caixaWrap.left + wrapper.scrollLeft + x(i) * escalaX;
+    const pontoY = caixaSvg.top - caixaWrap.top + y(ponto.cr) * escalaY;
+
+    const meiaLargura = tooltip.offsetWidth / 2;
+    const minX = wrapper.scrollLeft + meiaLargura + 4;
+    const maxX = wrapper.scrollLeft + wrapper.clientWidth - meiaLargura - 4;
+    tooltip.style.left = `${Math.min(Math.max(pontoX, minX), Math.max(minX, maxX))}px`;
+    tooltip.style.top = `${pontoY}px`;
+    tooltip.classList.toggle('chart-tooltip-abaixo', pontoY < tooltip.offsetHeight + 14);
+  };
+  const esconderTooltip = () => { tooltip.hidden = true; };
+
   acumData.forEach((p, i) => {
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     circle.setAttribute('cx', x(i));
@@ -729,17 +817,15 @@ export function renderSvgCrEvolution(periodos, crAcumuladoTotal) {
     circle.setAttribute('r', '5');
     circle.setAttribute('class', 'chart-dot chart-dot-acumulado');
     circle.setAttribute('tabindex', '0');
-    circle.addEventListener('mouseenter', () => {
-      tooltip.hidden = false;
-      tooltip.textContent = `${p.periodo}: CR acumulado ${formatNumberBR(p.cr, 3)}`;
-    });
-    circle.addEventListener('mouseleave', () => {
-      tooltip.hidden = true;
-    });
+    circle.setAttribute('aria-label', `${p.periodo}: CR acumulado ${formatNumberBR(p.cr, 3)}`);
+    circle.addEventListener('mouseenter', () => mostrarTooltip(i, p));
+    circle.addEventListener('focus', () => mostrarTooltip(i, p));
+    circle.addEventListener('mouseleave', esconderTooltip);
+    circle.addEventListener('blur', esconderTooltip);
     svg.appendChild(circle);
   });
 
-  const wrapper = el('div', { className: 'chart-wrap' }, [
+  wrapper = el('div', { className: 'chart-wrap' }, [
     svg,
     el('div', { className: 'chart-legenda' }, [
       el('span', { className: 'chart-legenda-item' }, [
@@ -1044,74 +1130,17 @@ function renderDisciplinas(periodos) {
   return el('div', { className: 'card periodo-card' }, [header, body]);
 }
 
-function disciplinaAprovada(d) {
-  const sit = String(d.situacao || d.status || '').toUpperCase().trim();
-  return sit === 'AP' || sit === 'T' || sit === 'A' || sit === 'NCC' || sit === 'NCG';
-}
-
-function _adicionarCodigosDeLista(lista, destino) {
-  (lista || []).forEach((r) => {
-    destino.add(String(r.codigo || '').trim().toUpperCase());
-    (r.aceitos || []).forEach((a) =>
-      destino.add(String(a || '').trim().toUpperCase())
-    );
-    (r.aceitos_conjunto || []).flat().forEach((a) =>
-      destino.add(String(a || '').trim().toUpperCase())
-    );
-  });
-}
-
-function getCodigosCicloBasico() {
-  const codigos = new Set();
-  _adicionarCodigosDeLista(state.regras?.ciclo_basico, codigos);
-  return codigos;
-}
-
-function getCodigosObrigatorias() {
-  const codigos = new Set();
-  // Lista global de obrigatórias do curso (básico + avançado).
-  _adicionarCodigosDeLista(state.regras?.obrigatorias, codigos);
-  // Fallback de compatibilidade caso o JSON só tenha ciclo_basico.
-  _adicionarCodigosDeLista(state.regras?.ciclo_basico, codigos);
-  return codigos;
-}
-
-function getOptativasCursadas(pendencias) {
-  const obrigatorias = getCodigosObrigatorias();
-  const catalogo = new Set(
-    (pendencias.optativas || [])
-      .map((o) => String(o.codigo || '').trim().toUpperCase())
-      .filter(Boolean)
-  );
-  const vistos = new Set();
-  const resultado = [];
-  const adicionar = (codigo, nome, detalhes = {}) => {
-    const c = String(codigo || '').trim().toUpperCase();
-    if (!c || vistos.has(c) || obrigatorias.has(c)) return;
-    // Aceita se está no catálogo de optativas do BOA OU já tem nota/conceito (aprovada).
-    const noCatalogo = catalogo.has(c);
-    const temNota = (detalhes.grau !== null && detalhes.grau !== undefined) || detalhes.situacao;
-    if (!noCatalogo && !temNota) return;
-    vistos.add(c);
-    resultado.push({
-      codigo: c,
-      nome: nome || c,
-      grau: detalhes.grau !== null && detalhes.grau !== undefined ? formatNumberBR(detalhes.grau, 1) : null,
-      situacao: detalhes.situacao || 'AP',
-    });
-  };
-
-  // Boletim: disciplinas aprovadas que não fazem parte do ciclo básico.
-  (state.boletim?.historico?.periodos || []).forEach((p) => {
-    (p.disciplinas || []).forEach((d) => {
-      if (disciplinaAprovada(d)) adicionar(d.codigo, d.nome, d);
-    });
-  });
-  // BOA: aprovadas/cumpridos da zona superior.
-  (state.boa?.dados?.aprovadas || []).forEach((d) => adicionar(d.codigo, d.nome, d));
-  (state.boa?.dados?.cumpridos || []).forEach((d) => adicionar(d, d, {}));
-
-  return resultado;
+/**
+ * Eletivas/optativas cursadas para exibição: Boletim + zona de aprovadas do
+ * BOA, sem obrigatórias do PPC e sem colunas do elenco recomendado (regra em
+ * domain/eletivas.js).
+ */
+function getOptativasCursadas() {
+  return listarEletivasCursadas(getMergedDados().periodos, state.regras)
+    .map((d) => ({
+      ...d,
+      grau: typeof d.grau === 'number' ? formatNumberBR(d.grau, 1) : d.grau,
+    }));
 }
 
 const STATUS_PENDENCIA = {
@@ -1121,35 +1150,24 @@ const STATUS_PENDENCIA = {
   cursando: 'Cursando',
 };
 
-function calcularCreditosEletivasPorBoletim(periodos, regras) {
-  if (!regras) return 0;
-  const obrigatorias = new Set();
-  const adicionar = (lista) => {
-    for (const req of lista || []) {
-      obrigatorias.add(String(req.codigo || '').trim().toUpperCase());
-      (req.aceitos || []).forEach((cod) =>
-        obrigatorias.add(String(cod || '').trim().toUpperCase())
-      );
-      (req.aceitos_conjunto || []).flat().forEach((cod) =>
-        obrigatorias.add(String(cod || '').trim().toUpperCase())
-      );
-    }
-  };
-  // Lista global de obrigatórias (ciclo básico + avançado).
-  adicionar(regras.obrigatorias);
-  // Fallback de compatibilidade caso o JSON só possua ciclo_basico.
-  adicionar(regras.ciclo_basico);
+// Cores discretas por status do BOA (mesma escala dos badges de situação).
+const BADGE_STATUS_PENDENCIA = {
+  cursando: 'badge-cursando',
+  inscricao_facultada: 'badge-ciano',
+  inscricao_vedada: 'badge-reprovado',
+  a_cursar: 'badge-neutro',
+};
 
-  let total = 0;
-  for (const p of periodos || []) {
-    for (const d of p.disciplinas || []) {
-      if (!disciplinaConcluida(d)) continue;
-      const cod = String(d.codigo || '').trim().toUpperCase();
-      if (obrigatorias.has(cod)) continue;
-      total += Number(d.crR) || 0;
-    }
-  }
-  return total;
+const ROTULO_SITUACAO = {
+  AP: 'Aprovada',
+  A: 'Aprovada',
+  T: 'Aproveitamento',
+  NCC: 'Sem crédito',
+  NCG: 'Sem grau',
+};
+
+function calcularCreditosEletivasPorBoletim(periodos, regras) {
+  return creditosEletivasCursadas(periodos, regras);
 }
 
 /**
@@ -1180,7 +1198,7 @@ export function calcularProgressoIntegralizacao(periodos, regras) {
     periodos,
     regras
   );
-  const faltantesEletivas = Math.max(0, 44 - creditosEletivasCumpridos);
+  const faltantesEletivas = Math.max(0, CREDITOS_ELETIVAS_EXIGIDOS - creditosEletivasCumpridos);
 
   return {
     faltantesObrigatorias,
@@ -1193,28 +1211,26 @@ export function calcularProgressoIntegralizacao(periodos, regras) {
 
 function renderPendencias(pendencias) {
   const formatarStatus = (status) =>
-    STATUS_PENDENCIA[status] || (status ? String(status).replace(/_/g, ' ') : 'Pendente');
-  const statusEl = (status) => {
-    const texto = formatarStatus(status);
-    if (String(status || '').toUpperCase() === 'CURSANDO') {
-      return el('span', { className: 'status-cursando-texto' }, texto);
-    }
-    return document.createTextNode(texto);
-  };
-  const itemObr = (d) =>
-    el('li', {}, [
-      `${d.codigo || d.nome} — `,
-      statusEl(d.status),
+    STATUS_PENDENCIA[String(status || '').toLowerCase()]
+      || (status ? String(status).replace(/_/g, ' ') : 'Pendente');
+  const badgeStatus = (status) => el('span', {
+    className: `badge ${BADGE_STATUS_PENDENCIA[String(status || '').toLowerCase()] || 'badge-neutro'}`,
+  }, formatarStatus(status));
+
+  /** Linha de disciplina: código · nome · badges (sem bullets). */
+  const linhaDisciplina = (codigo, nome, badges) =>
+    el('li', { className: 'disc-linha' }, [
+      el('span', { className: 'disc-codigo' }, codigo || '—'),
+      el('span', { className: 'disc-nome' }, nome || codigo || '—'),
+      el('span', { className: 'disc-badges' }, badges),
     ]);
-  const itemOpt = (d) => {
-    const partes = [`${d.codigo} — ${d.nome}`];
-    if (d.grau) partes.push(` (${d.grau})`);
-    if (d.situacao) {
-      partes.push(' — ');
-      partes.push(statusEl(d.situacao));
-    }
-    return el('li', {}, partes);
-  };
+
+  const itemObr = (d) => linhaDisciplina(d.codigo, d.nome, [badgeStatus(d.status)]);
+  const itemOpt = (d) => linhaDisciplina(d.codigo, d.nome, [
+    d.grau ? el('span', { className: 'disc-grau' }, `grau ${d.grau}`) : null,
+    el('span', { className: `badge ${badgeClassForSituacao(d.situacao)}` },
+      ROTULO_SITUACAO[d.situacao] || d.situacao),
+  ]);
 
   // Agrupa obrigatórias pendentes pelo período recomendado do BOA.
   const renderObrigatoriasPorPeriodo = () => {
@@ -1235,18 +1251,18 @@ function renderPendencias(pendencias) {
 
     return ordenado.map(([periodo, lista]) =>
       el('div', {}, [
-        el('h5', { className: 'mt-2 mb-1 text-muted' },
+        el('h5', { className: 'disc-grupo' },
           typeof periodo === 'number'
-            ? `${periodo}º Período`
+            ? `${periodo}º período`
             : 'Período não identificado'),
-        el('ul', { className: 'pendencias-obr' }, lista.map(itemObr)),
+        el('ul', { className: 'lista-disciplinas' }, lista.map(itemObr)),
       ])
     );
   };
 
   // Fonte única da verdade: Boletim (disciplinas aprovadas).
   const progresso = calcularProgressoIntegralizacao(
-    state.boletim?.historico?.periodos,
+    getMergedDados().periodos,
     state.regras
   );
   const creditosEletivasCumpridos = progresso.creditosEletivasCumpridos;
@@ -1263,7 +1279,7 @@ function renderPendencias(pendencias) {
   };
 
   // Heurística visual de categorização de eletivas/optativas já cursadas.
-  const optativasCursadas = getOptativasCursadas(pendencias)
+  const optativasCursadas = getOptativasCursadas()
     .slice()
     .sort((a, b) => String(a.codigo || '').localeCompare(String(b.codigo || '')));
   const categorias = { condicionadas: [], restrita: [], livres: [] };
@@ -1280,8 +1296,8 @@ function renderPendencias(pendencias) {
   const renderCategoria = (titulo, lista) =>
     lista.length
       ? el('div', {}, [
-          el('h5', { className: 'mt-2 mb-1 text-muted' }, titulo),
-          el('ul', { className: 'optativas-lista' }, lista.map(itemOpt)),
+          el('h5', { className: 'disc-grupo' }, titulo),
+          el('ul', { className: 'lista-disciplinas' }, lista.map(itemOpt)),
         ])
       : null;
 
@@ -1343,7 +1359,7 @@ function renderPendencias(pendencias) {
 
 function renderJornada() {
   const progresso = calcularProgressoIntegralizacao(
-    state.boletim?.historico?.periodos,
+    getMergedDados().periodos,
     state.regras
   );
   const creditosRestantes = progresso.creditosRestantes;

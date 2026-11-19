@@ -373,6 +373,28 @@
           sob o <strong>PPC 2022</strong>, integrando a extração local dos documentos
           SIGA (Boletim Não Oficial + BOA) à análise da Comissão de Estágio.
         </p>
+        <h3>Como funciona</h3>
+        <ul>
+          <li>
+            <strong>Discente:</strong> anexa o Boletim e o BOA, confere os dados
+            extraídos, declara exceções e envia à Comissão. A
+            <strong>Análise de Desempenho</strong> (CR por período, obrigatórias
+            pendentes, eletivas cursadas e jornada de estágio) funciona também como
+            <strong>simulador</strong>: continua disponível mesmo com processo em
+            análise ou autorização vigente, sem permitir um novo envio.
+          </li>
+          <li>
+            <strong>Comissão:</strong> recebe os processos já triados e delibera na
+            Mesa de Análise, com <strong>conferência documental obrigatória</strong>:
+            o servidor confere nome, DRE e disciplinas no texto dos PDFs, e a
+            aprovação só é liberada depois que o Boletim e o BOA foram abertos.
+          </li>
+          <li>
+            <strong>Transparência:</strong> o portal <code>/autorizados</code> lista as
+            autorizações válidas e expiradas, com métricas como o tempo médio de
+            resposta e o DRE mascarado.
+          </li>
+        </ul>
         <p class="text-muted">
           <strong>Versão técnica:</strong> motor de parsing calibrado com base no layout
           SIGA/UFRJ de setembro/2026.
@@ -380,7 +402,7 @@
         <h3>Segurança e Governança</h3>
         <ul>
           <li>PDFs são processados no navegador e só enviados ao servidor após confirmação.</li>
-          <li>Os arquivos brutos são cifrados em repouso e expurgados após a conclusão do processo.</li>
+          <li>Os arquivos brutos são cifrados em repouso, gravados com nome aleatório (sem dados pessoais) e expurgados após a conclusão do processo.</li>
           <li>Todas as ações são registradas em log transacional imutável com hash chain.</li>
           <li>Dados tratados conforme a LGPD.</li>
         </ul>

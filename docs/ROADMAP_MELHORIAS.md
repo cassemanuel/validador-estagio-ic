@@ -5,18 +5,32 @@ Este documento reúne as melhorias planejadas e as contingências documentadas p
 ## 1. Integração LDAP em produção
 
 - Substituir o provider de autenticação local/seed pelo LDAP institucional da UFRJ.
-- Campos esperados: `uid`, `cn`, `mail`, `departmentNumber` ou grupo da Comissão de Estágio.
-- Variáveis de ambiente: `LDAP_HOST`, `LDAP_BIND_DN`, `LDAP_BASE_DN`, `LDAP_ENABLED=true`.
+- Campos esperados: `uid`, `cn`/`displayName` e o grupo da Comissão de Estágio.
+- Variáveis de ambiente (ver `.env.example`): `AUTH_PROVIDER=ldap`, `LDAP_URL`,
+  `LDAP_BASE_DN`, `LDAP_BIND_DN`, `LDAP_BIND_PASSWORD`, `LDAP_USER_FILTER` e
+  `LDAP_GROUP_COMISSAO` (com `COMMISSION_USERS` como lista de apoio).
+- Com `AUTH_PROVIDER=ldap` a aplicação exige `JWT_SECRET` forte e
+  `STORAGE_ENCRYPTION_KEY`, e não provisiona os usuários seed.
 
 ## 2. Integração com nuvem institucional (backup)
 
-- **Objetivo:** redundância off-site do volume `./data` sem expor documentos brutos.
+- **Objetivo:** redundância off-site dos dados da aplicação (volume `app-data`,
+  montado em `/app/data`) sem expor documentos brutos.
+- **Pré-requisito — snapshot do SQLite (modo WAL):** nunca sincronize o
+  `app.db` vivo (com `-wal`/`-shm` sendo escritos), pois a cópia pode ficar
+  inconsistente. Antes de cada sincronização, gere um snapshot com a API de
+  backup do SQLite (`sqlite3.Connection.backup` / comando `.backup`) ou
+  `VACUUM INTO '/app/data/backup/app-AAAA-MM-DD.db'`, e envie **apenas o
+  snapshot**, junto com `uploads/` (já cifrados). A `STORAGE_ENCRYPTION_KEY`
+  deve ser guardada fora do backup (cofre institucional).
 - **Opção A — Nextcloud do IC via WebDAV:**
   - Configurar `NEXTCLOUD_URL`, `NEXTCLOUD_USER`, `NEXTCLOUD_PASS`.
-  - Rotina diária (`services/backup.py`) sincroniza `./data` via WebDAV.
+  - Rotina diária (`services/backup.py`) gera o snapshot e sincroniza o
+    snapshot + `uploads/` via WebDAV.
 - **Opção B — rclone:**
   - Perfil `rclone` apontando para S3/Nextcloud/Google Drive institucional.
-  - Job cron/contab no host ou container sidecar.
+  - Job cron/crontab no host ou container sidecar que gera o snapshot antes
+    do `rclone sync` (nunca sincroniza o `app.db` vivo).
 
 ## 3. Notificações automáticas por e-mail
 
@@ -42,7 +56,8 @@ Este documento reúne as melhorias planejadas e as contingências documentadas p
 - **Status do módulo de Relatórios de Estágio:** em construção — placeholder
   navegável em `/admin/relatorios`, previsto para o ciclo **2027/1**.
 - Exportação CSV/JSONL da fila, autorizações e auditoria.
-- Métricas de tempo médio de análise e taxa de deferimento por semestre.
+- Taxa de deferimento por semestre (tempo médio de resposta e período mais
+  comum entre os deferidos já estão no portal `/autorizados`).
 - Painel de evolução histórica do CR agregado (anonimizado).
 
 ## 6. Auditoria e compliance

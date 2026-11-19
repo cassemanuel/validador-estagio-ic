@@ -35,16 +35,43 @@ Monorepo cliente-servidor:
    - **BOA (Boletim de Orientação Acadêmica)**: grade curricular, pendências
      e cumprimentos no PPC 2022.
 3. Parsing local + confirmação interativa dos dados extraídos.
-4. Declaração estruturada de exceções (equivalência / dispensa / aproveitamento).
-5. Diagnóstico preliminar de elegibilidade.
+4. Declaração estruturada de exceções (equivalência / dispensa / aproveitamento /
+   acordo / outros).
+5. Diagnóstico preliminar de elegibilidade e **Análise de Desempenho**: evolução
+   do CR por período, obrigatórias pendentes (com status do BOA), eletivas e
+   optativas cursadas (créditos contados a partir do Boletim) e jornada de
+   estágio permitida.
 6. Submissão à Comissão de Estágio.
+
+**Modo simulador.** Com uma submissão em análise ou uma autorização vigente
+(fora da janela de renovação de `RENOVACAO_JANELA_DIAS`, padrão 30 dias), o
+envio oficial fica bloqueado — no portal e também no servidor (HTTP 409) —,
+mas a Análise de Desempenho continua acessível: ela abre pré-carregada com os
+dados da última submissão e o discente pode anexar documentos atualizados
+apenas para simular a grade. Um novo upload descarta o par anterior; nada é
+misturado entre submissões.
 
 A triagem automática (`services/triagem.py`) encaminha o processo para:
 
-- **Fila de Casos Regulares** (aprovação em 1 clique) quando apto, sem exceções
-  e sem alertas de saneamento.
-- **Mesa de Revisão** (split-screen: Boletim/BOA × dados extraídos) nos demais
-  casos.
+- **Fila de Casos Regulares** quando apto, sem exceções e sem alertas de
+  saneamento (incluindo os da conferência automática dos PDFs).
+- **Mesa de Revisão** nos demais casos.
+
+Em ambos os casos a aprovação acontece na **Mesa** (split-screen: Boletim/BOA ×
+dados extraídos), com **conferência obrigatória**: o botão "Aprovar" só segue
+depois que o membro da comissão abriu o Boletim e o BOA (no visualizador ou em
+nova guia); antes disso, um aviso explica o que falta conferir.
+
+### Portal de transparência (`/autorizados`)
+
+Acessível a qualquer usuário autenticado:
+
+- métricas das autorizações — tempo médio de resposta (últimos 3 meses),
+  totais de autorizados e expirados e período mais comum entre os deferidos;
+- listas de autorizações **válidas** e **expiradas**, paginadas ("Carregar
+  mais") e com busca por nome;
+- DRE **mascarado** (ex.: `120****01`) e paginação limitada a 50 itens por
+  página. A comissão vê o DRE completo em `/admin/autorizacoes`.
 
 ### Comissão / Admin
 
@@ -55,9 +82,11 @@ O painel administrativo possui **5 telas dedicadas**:
 2. **`/admin/fila`** — tabela unificada de triagem com busca por nome/DRE,
    filtro por status (incluindo **Arquivadas**) e paginação.
 3. **`/admin/mesa`** — análise individual do processo, com abas para alternar
-   entre Boletim e BOA, exceções declaradas, evolução do CR, deliberação e
-   **arquivamento** de processos concluídos.
-4. **`/admin/autorizacoes`** — liberações deferidas e validade de 90 dias.
+   entre Boletim e BOA, alertas de saneamento, exceções declaradas, evolução
+   do CR, deliberação (com conferência obrigatória dos dois PDFs antes de
+   aprovar) e **arquivamento** de processos concluídos.
+4. **`/admin/autorizacoes`** — liberações deferidas, validade de 90 dias e
+   revogação (mesma tela do portal `/autorizados`, com DRE completo).
 5. **`/admin/relatorios`** — módulo de acompanhamento de relatórios de estágio
    (em construção, previsto para o ciclo 2027/1).
 
@@ -68,9 +97,17 @@ O painel administrativo possui **5 telas dedicadas**:
 - **Magic bytes**: todos os uploads são validados contra o cabeçalho `%PDF-`
   tanto no cliente quanto no servidor.
 - **Tamanho**: limite estrito de **15 MB por arquivo PDF**; rejeição com HTTP 413.
-- **Path traversal**: DRE e identificadores são sanitizados antes de compor os
-  nomes dos arquivos no disco (`boletim_{dre}_{timestamp}.pdf` /
-  `boa_{dre}_{timestamp}.pdf`).
+- **Nomes de arquivo aleatórios**: os PDFs são gravados como
+  `{boletim,boa}_<uuid4>.bin` — sem DRE ou outro dado pessoal no nome e sem
+  colisão entre envios simultâneos (elimina o risco de path traversal).
+- **Conferência documental no servidor**: o texto dos dois PDFs é extraído com
+  `pypdf` (`services/documento.py`). Nome e DRE informados precisam constar no
+  Boletim e no BOA, e as disciplinas declaradas como concluídas precisam
+  constar no documento de origem. Identidade divergente ou PDF ilegível
+  resultam em HTTP 422 (`IDENTIDADE_PDF_MODO=bloquear`, padrão) ou, no modo de
+  contingência `alertar`, em alerta + Mesa de Revisão; código ausente gera
+  alerta e envia o caso à Mesa. Só o diagnóstico recalculado pelo servidor é
+  persistido.
 - **SPA fallback confinado**: o `spa_fallback` resolve o caminho canônico e só
   serve arquivos contidos em `frontend/` (`resolve()` + `is_relative_to`);
   tentativas de escape como `..%2f` retornam HTTP 404 — coberto por testes em
@@ -86,10 +123,14 @@ O painel administrativo possui **5 telas dedicadas**:
   `PDF_RETENTION_DAYS` (padrão 30) da conclusão do processo — job periódico em
   `services/expurgo.py`.
 - **Criptografia em repouso:** antes de gravar em disco, cada PDF é cifrado
-  com Fernet (`cryptography`) e armazenado em `data/uploads/*.bin`. A chave
-  pode ser fornecida por `STORAGE_ENCRYPTION_KEY` no `.env` ou derivada do
-  `JWT_SECRET` via PBKDF2-HMAC-SHA256. O servidor decifra o arquivo em memória
-  apenas ao fazer stream para a mesa de curadoria.
+  com Fernet (`cryptography`) e armazenado em
+  `data/uploads/{boletim,boa}_<uuid4>.bin`. A chave `STORAGE_ENCRYPTION_KEY` é
+  **obrigatória em produção** (`ENV` diferente de `dev` ou
+  `AUTH_PROVIDER=ldap`): sem ela — ou com `JWT_SECRET` padrão/curto — a
+  aplicação recusa subir. Só em desenvolvimento, se ausente, a chave é
+  derivada do `JWT_SECRET` via PBKDF2-HMAC-SHA256. O servidor decifra o
+  arquivo em memória apenas ao fazer stream para a Mesa, com
+  `Cache-Control: no-store`.
 - `audit_log` registra logins, submissões, acessos aos PDFs, decisões e
   expurgos, sem guardar o documento nem dados pessoais além do necessário.
 - Hash chain sha256 garante integridade tamper-evident dos registros de auditoria.
@@ -98,17 +139,19 @@ O painel administrativo possui **5 telas dedicadas**:
 
 ### Armazenamento local e Docker
 
-O `docker-compose.yml` monta o diretório `data/` do host dentro do container:
+O `docker-compose.yml` persiste `/app/data` no **volume nomeado** `app-data`
+(e não num diretório `./data` do host):
 
 ```yaml
 volumes:
-  - ./data:/app/data
+  - app-data:/app/data
 ```
 
-Assim, o banco SQLite (`data/app.db`, `data/app.db-wal`, `data/app.db-shm`)
-e os PDFs cifrados (`data/uploads/*.bin`) persistem no servidor hospedeiro,
-mesmo após o container ser destruído. Para backup, basta copiar o diretório
-`data/`.
+O banco SQLite (`app.db`, `app.db-wal`, `app.db-shm`) e os PDFs cifrados
+(`uploads/*.bin`) sobrevivem à recriação do container. **Não copie o `app.db`
+com a aplicação rodando** (modo WAL): gere antes um snapshot consistente
+(`sqlite3` `.backup` ou `VACUUM INTO`) e faça o backup do snapshot — ver
+[`docs/ROADMAP_MELHORIAS.md`](docs/ROADMAP_MELHORIAS.md), seção 2.
 
 ## Documentação detalhada
 
@@ -174,10 +217,12 @@ cd .. && npm test
 | POST   | `/api/auth/login` | — | Login (cookie httpOnly JWT) |
 | POST   | `/api/submissoes` | discente | Multipart: Boletim + BOA + dados extraídos |
 | GET    | `/api/submissoes/minha` | discente | Submissão ativa + decisão |
+| GET    | `/api/autorizacoes` | autenticado | Portal de transparência: autorizações paginadas (`status`, `q` por nome, `limite` ≤ 50), DRE mascarado |
+| GET    | `/api/autorizacoes/metricas` | autenticado | Métricas do portal (tempo médio de resposta, totais, período mais comum) |
 | GET    | `/api/comissao/fila?tipo=todos\|regular\|revisao` | comissão | Fila de triagem |
 | GET    | `/api/comissao/metricas` | comissão | Métricas consolidadas |
 | GET    | `/api/comissao/auditoria` | comissão | Últimos eventos do audit_log |
-| GET    | `/api/comissao/autorizacoes` | comissão | Autorizações deferidas |
+| GET    | `/api/comissao/autorizacoes` | comissão | Autorizações deferidas (DRE completo, busca por nome/DRE) |
 | GET    | `/api/comissao/submissoes/{id}` | comissão | Dados completos do processo |
 | GET    | `/api/comissao/submissoes/{id}/boletim` | comissão | Stream do Boletim (auditado) |
 | GET    | `/api/comissao/submissoes/{id}/boa` | comissão | Stream do BOA (auditado) |

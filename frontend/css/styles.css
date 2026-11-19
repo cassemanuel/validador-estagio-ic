@@ -63,6 +63,12 @@
   --spacing-lg: 1.5rem;
   --spacing-xl: 2rem;
 
+  /* Proporções do layout (padrão editorial do portal IC/UFRJ) */
+  --content-max: 1120px;
+  --control-h: 2.5rem;     /* botões, campos e selects */
+  --control-h-sm: 2rem;    /* variantes compactas (btn-sm) */
+  --badge-h: 1.5rem;
+
   /* Transições */
   --transition-fast: 150ms ease;
   --transition-base: 250ms ease;
@@ -135,7 +141,11 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Coluna flex de altura total: header e footer nas pontas, conteúdo no
+   meio — telas curtas (login) não geram barra de rolagem. */
 body {
+  display: flex;
+  flex-direction: column;
   margin: 0;
   min-height: 100vh;
   font-family: var(--font-body);
@@ -149,12 +159,17 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   font-weight: 700;
-  margin: 0 0 var(--spacing-lg);
+  line-height: 1.25;
+  margin: 0 0 var(--spacing-md);
   color: var(--text-primary);
 }
 
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.15rem; }
+h4 { font-size: 1rem; }
+
 p {
-  margin: 0 0 var(--spacing-lg);
+  margin: 0 0 var(--spacing-md);
 }
 
 a {
@@ -209,7 +224,8 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-md) var(--spacing-xl);
+  min-height: 4rem;
+  padding: var(--spacing-sm) var(--spacing-xl);
   background-color: var(--bg-header);
   color: var(--text-on-dark);
   box-shadow: var(--shadow-md);
@@ -332,9 +348,18 @@ a:hover {
 
 /* ----- Conteúdo principal ----- */
 .app-main {
-  max-width: 1100px;
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--content-max);
   margin: 0 auto;
-  padding: var(--spacing-xl);
+  padding: var(--spacing-lg) var(--spacing-xl);
+}
+
+/* Login: card centralizado vertical e horizontalmente no espaço livre. */
+#view-login.active {
+  margin-block: auto;
 }
 
 .docs-main {
@@ -408,8 +433,8 @@ a:hover {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-xl);
-  margin-bottom: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
   box-shadow: var(--shadow-sm);
   transition: background-color var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-fast);
 }
@@ -567,7 +592,9 @@ a:hover {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
+  min-height: var(--control-h);
+  line-height: 1.2;
+  padding: var(--spacing-xs) var(--spacing-md);
   font-family: var(--font-heading);
   font-weight: 600;
   font-size: 0.9rem;
@@ -722,7 +749,9 @@ tbody tr:hover {
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: var(--spacing-xs) var(--spacing-sm);
+  min-height: var(--badge-h);
+  line-height: 1.1;
+  padding: 2px var(--spacing-sm);
   font-family: var(--font-heading);
   font-size: 0.75rem;
   font-weight: 600;
@@ -843,11 +872,14 @@ tbody tr:hover {
   stroke-width: 3;
 }
 
+/* Posição (left/top) definida em JS no ponto ativo; o balão fica acima do
+   ponto, ou abaixo quando não cabe no topo (.chart-tooltip-abaixo). */
 .chart-tooltip {
   position: absolute;
-  bottom: 8px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 0;
+  left: 0;
+  transform: translate(-50%, calc(-100% - 10px));
+  width: max-content;
   z-index: 20;
   max-width: 320px;
   max-height: 260px;
@@ -861,6 +893,10 @@ tbody tr:hover {
   font-size: 0.85rem;
   color: var(--text-primary);
   pointer-events: none;
+}
+
+.chart-tooltip-abaixo {
+  transform: translate(-50%, 10px);
 }
 
 [data-theme="dark"] .chart-tooltip {
@@ -1050,7 +1086,8 @@ input[type="number"],
 input[type="search"],
 input[type="file"],
 select {
-  padding: var(--spacing-sm) var(--spacing-md);
+  min-height: var(--control-h);
+  padding: var(--spacing-xs) var(--spacing-md);
   font-family: var(--font-body);
   font-size: 0.95rem;
   color: var(--text-primary);
@@ -1272,9 +1309,10 @@ table .btn {
 /* ----- Footer ----- */
 .app-footer {
   margin-top: auto;
-  padding: var(--spacing-lg) var(--spacing-xl);
+  padding: var(--spacing-md) var(--spacing-xl);
   text-align: center;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
   color: var(--text-muted);
   border-top: 1px solid var(--divider-color);
 }
@@ -1284,7 +1322,12 @@ table .btn {
 }
 
 .app-footer .footer-links {
-  margin-top: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+}
+
+.app-footer > p:first-child {
+  max-width: 900px;
+  margin-inline: auto;
 }
 
 .footer-links a {
@@ -1580,8 +1623,19 @@ table .btn {
    ============================================================ */
 
 .login-card {
+  width: 100%;
   max-width: 420px;
-  margin: var(--spacing-xl) auto;
+  margin: 0 auto;
+  box-shadow: var(--shadow-md);
+}
+
+.login-card h2 {
+  margin-bottom: var(--spacing-xs);
+}
+
+.login-card > .text-muted {
+  font-size: 0.9rem;
+  margin-bottom: 0;
 }
 
 .login-form {
@@ -1616,9 +1670,9 @@ table .btn {
 
 .excecao-form input,
 .excecao-form select {
-  height: 42px;
-  min-height: 42px;
-  padding: 8px 12px;
+  height: var(--control-h);
+  min-height: var(--control-h);
+  padding: var(--spacing-xs) var(--spacing-md);
 }
 
 .excecao-form textarea,
@@ -1633,8 +1687,8 @@ table .btn {
 }
 
 .login-form input {
-  height: 42px;
-  padding: 8px 12px;
+  height: var(--control-h);
+  padding: var(--spacing-xs) var(--spacing-md);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background-color: var(--bg-card);
@@ -1688,8 +1742,14 @@ table .btn {
 }
 
 .btn-sm {
+  min-height: var(--control-h-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
   font-size: 0.85rem;
+}
+
+/* Botões textuais (rodapé, respostas rápidas) não seguem a altura padrão. */
+.btn.btn-text {
+  min-height: 0;
 }
 
 .submit-card {
@@ -1828,6 +1888,16 @@ table .btn {
   border-top: 1px solid var(--divider-color);
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.login-dev p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.login-dev .actions-row {
+  margin: 0;
   gap: var(--spacing-sm);
 }
 
@@ -2160,10 +2230,16 @@ table .btn {
 .admin-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: var(--spacing-md);
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--divider-color);
   flex-wrap: wrap;
+}
+
+.admin-header p {
+  margin: var(--spacing-xs) 0 0;
 }
 
 .admin-header h2 {
@@ -2187,7 +2263,8 @@ table .btn {
 .input-busca {
   width: 100%;
   max-width: 420px;
-  padding: var(--spacing-sm) var(--spacing-md);
+  height: var(--control-h);
+  padding: var(--spacing-xs) var(--spacing-md);
 }
 
 .input-ano {
@@ -2302,9 +2379,9 @@ table .btn {
   font-size: 0.8rem;
 }
 
-/* Cards de métricas com mais respiro */
+/* Cards de métricas */
 .metric-card {
-  padding: var(--spacing-xl);
+  padding: var(--spacing-lg);
 }
 
 /* Tabelas e formulários com mais contraste */
@@ -2487,7 +2564,7 @@ th {
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--spacing-md);
-  margin-top: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
 }
 
 .footer-note {
@@ -2617,6 +2694,80 @@ th {
    motivo (ex.: "Aprovar" na Mesa antes de abrir Boletim e BOA). */
 .btn[aria-disabled="true"] {
   opacity: 0.65;
+}
+
+/* Listas de disciplinas (pendências do BOA e eletivas cursadas): linhas
+   código · nome · status, sem bullets. */
+.disc-grupo {
+  margin: var(--spacing-md) 0 var(--spacing-xs);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.lista-disciplinas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--divider-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.disc-linha {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: 0.875rem;
+  border-bottom: 1px solid var(--divider-color);
+}
+
+.disc-linha:last-child {
+  border-bottom: none;
+}
+
+.disc-linha:nth-child(even) {
+  background-color: var(--bg-table-row-alt);
+}
+
+.disc-codigo {
+  font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.disc-nome {
+  overflow-wrap: anywhere;
+}
+
+.disc-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.disc-grau {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .disc-linha {
+    grid-template-columns: 4.25rem minmax(0, 1fr);
+  }
+
+  .disc-badges {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
 }
 
 /* Estados de carregamento e erro (Fila, Autorizados) */
