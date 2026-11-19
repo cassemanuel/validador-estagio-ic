@@ -2613,6 +2613,12 @@ th {
   margin-bottom: var(--spacing-md);
 }
 
+/* Ação bloqueada por pré-requisito, mas ainda clicável para explicar o
+   motivo (ex.: "Aprovar" na Mesa antes de abrir Boletim e BOA). */
+.btn[aria-disabled="true"] {
+  opacity: 0.65;
+}
+
 /* Estados de carregamento e erro (Fila, Autorizados) */
 .estado-carregando {
   display: flex;

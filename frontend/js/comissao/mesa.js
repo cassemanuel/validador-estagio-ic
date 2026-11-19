@@ -15,7 +15,7 @@ import {
   calcularProgressoIntegralizacao,
   renderSvgCrEvolution,
 } from '../discente/portal.js';
-import { dialogConfirmar } from '../ui/dialog.js';
+import { dialogAviso, dialogConfirmar } from '../ui/dialog.js';
 import { carregarRegras } from '../rules/ppc2022.js';
 import { navegarPara } from '../router.js';
 
@@ -421,6 +421,7 @@ function renderDeliberacao(sub, controleDocs) {
   const erro = el('p', { className: 'login-erro', role: 'alert', hidden: true });
   // Aviso discreto enquanto Boletim e BOA não foram abertos (piloto).
   const avisoDocs = el('p', {
+    id: `mesa-aviso-documentos-${sub.id}`,
     className: 'text-muted aviso-documentos', role: 'status', 'aria-live': 'polite',
   });
 
@@ -439,10 +440,42 @@ function renderDeliberacao(sub, controleDocs) {
     if (!controleDocs) return false;
     return controleDocs.pendentes().length > 0 || controleDocs.indisponiveis().length > 0;
   };
+
+  /** Explica, no modal, por que a aprovação ainda não pode seguir. */
+  const avisarConferenciaPendente = () => {
+    const nomes = (lista) => lista.map((n) => ROTULO_DOC[n]).join(' e ');
+    const indisponiveis = controleDocs.indisponiveis();
+    const pendentes = controleDocs.pendentes();
+    if (indisponiveis.length) {
+      return dialogAviso(
+        'Aprovação indisponível',
+        `Este processo não pode ser aprovado: ${nomes(indisponiveis)} está indisponível ou foi `
+          + 'expurgado, e a aprovação exige a conferência do Boletim e do BOA originais. '
+          + 'Indefira ou devolva o processo, informando o motivo.'
+          + (pendentes.length ? ` (Também falta abrir: ${nomes(pendentes)}.)` : ''),
+      );
+    }
+    return dialogAviso(
+      'Conferência obrigatória pendente',
+      'Antes de aprovar o estágio, abra e confira o Boletim e o BOA do discente '
+        + `(na aba acima ou em nova guia). Falta abrir: ${nomes(pendentes)}.`,
+    );
+  };
+
   const atualizarBotoes = () => {
-    botoesDeliberacao.forEach((b) => {
-      b.disabled = deliberando || (b === btnAprovar && aprovacaoBloqueada());
-    });
+    // `disabled` só durante o envio (evita duplo clique). Com a conferência
+    // pendente, "Aprovar" continua clicável — o clique abre o modal explicando
+    // o que falta — e é sinalizado com aria-disabled.
+    botoesDeliberacao.forEach((b) => { b.disabled = deliberando; });
+    if (btnAprovar) {
+      if (aprovacaoBloqueada()) {
+        btnAprovar.setAttribute('aria-disabled', 'true');
+        btnAprovar.setAttribute('aria-describedby', avisoDocs.id);
+      } else {
+        btnAprovar.removeAttribute('aria-disabled');
+        btnAprovar.removeAttribute('aria-describedby');
+      }
+    }
     if (!controleDocs) return;
     const indisponiveis = controleDocs.indisponiveis();
     const pendentes = controleDocs.pendentes();
@@ -468,7 +501,10 @@ function renderDeliberacao(sub, controleDocs) {
       return;
     }
     if (decisao === 'aprovada') {
-      if (aprovacaoBloqueada()) return; // defesa extra: botão já desabilitado
+      if (aprovacaoBloqueada()) {
+        await avisarConferenciaPendente();
+        return;
+      }
       const nome = sub.metadata?.nome || `processo #${sub.id}`;
       const ok = await dialogConfirmar({
         titulo: 'Aprovar Processo',
